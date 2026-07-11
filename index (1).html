@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Magix Sales CRM</title>
+<style>
+  :root{
+    --navy:#151b2e;
+    --navy-2:#1f2740;
+    --panel:#ffffff;
+    --bg:#f3f4f8;
+    --ink:#151b2e;
+    --muted:#6b7280;
+    --line:#e6e8f0;
+    --accent:#3654ff;
+    --accent-soft:#eaedff;
+    --hot:#ef4444;
+    --warm:#f59e0b;
+    --cold:#3b82f6;
+    --win:#10b981;
+    --lost:#9ca3af;
+    --radius:12px;
+    font-family:'Segoe UI',Inter,system-ui,-apple-system,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);}
+  h1,h2,h3,h4{margin:0;font-family:'Segoe UI',Inter,system-ui,sans-serif;letter-spacing:-0.01em;}
+  button{font-family:inherit;cursor:pointer;}
+  input,select,textarea{font-family:inherit;}
+
+  /* Layout */
+  .app{display:flex;min-height:100vh;}
+  .sidebar{width:220px;background:var(--navy);color:#cdd3e6;flex-shrink:0;display:flex;flex-direction:column;padding:18px 12px;}
+  .brand{color:#fff;font-weight:700;font-size:17px;padding:6px 10px 20px;display:flex;align-items:center;gap:8px;}
+  .brand .dot{width:10px;height:10px;border-radius:3px;background:var(--accent);display:inline-block;}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:9px;font-size:14px;color:#aeb5cc;margin-bottom:2px;transition:.15s;}
+  .nav-item:hover{background:#232c48;color:#fff;}
+  .nav-item.active{background:var(--accent);color:#fff;}
+  .nav-icon{width:18px;text-align:center;}
+  .sidebar-foot{margin-top:auto;font-size:11px;color:#6a7291;padding:10px;}
+
+  .main{flex:1;min-width:0;padding:22px 28px 60px;}
+  .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;}
+  .topbar h1{font-size:22px;}
+  .topbar .sub{color:var(--muted);font-size:13px;margin-top:2px;}
+  .btn{border:none;background:var(--accent);color:#fff;padding:9px 16px;border-radius:9px;font-size:13.5px;font-weight:600;display:inline-flex;align-items:center;gap:6px;}
+  .btn.secondary{background:#fff;color:var(--ink);border:1px solid var(--line);}
+  .btn.ghost{background:transparent;color:var(--accent);padding:6px 8px;}
+  .btn.small{padding:6px 11px;font-size:12.5px;}
+  .btn.danger{background:#fff;color:var(--hot);border:1px solid #fbd5d5;}
+
+  /* Dashboard cards */
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:22px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;}
+  .stat-num{font-size:26px;font-weight:700;}
+  .stat-label{font-size:12.5px;color:var(--muted);margin-top:2px;}
+  .panel-title{font-size:14px;font-weight:700;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;}
+  .two-col{display:grid;grid-template-columns:1.3fr 1fr;gap:16px;align-items:start;}
+  @media(max-width:900px){.two-col{grid-template-columns:1fr;}}
+
+  .list-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px;}
+  .list-row:last-child{border-bottom:none;}
+  .pill{padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;}
+  .pill.hot{background:#fee2e2;color:var(--hot);}
+  .pill.warm{background:#fef3c7;color:#b45309;}
+  .pill.cold{background:#dbeafe;color:#1d4ed8;}
+  .pill.won{background:#d1fae5;color:#047857;}
+  .pill.lost{background:#f3f4f6;color:#6b7280;}
+
+  .alert{background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:10px 14px;font-size:13px;color:#9a3412;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;}
+  .alert.danger{background:#fef2f2;border-color:#fecaca;color:#991b1b;}
+
+  /* Kanban */
+  .kanban{display:flex;gap:12px;overflow-x:auto;padding-bottom:10px;}
+  .kcol{background:#eceef5;border-radius:12px;min-width:250px;max-width:250px;padding:10px;flex-shrink:0;}
+  .kcol-head{font-size:12.5px;font-weight:700;color:#4b5063;display:flex;justify-content:space-between;margin-bottom:8px;padding:0 3px;}
+  .kcard{background:#fff;border-radius:10px;padding:10px 12px;margin-bottom:8px;box-shadow:0 1px 2px rgba(20,20,40,.06);cursor:grab;border:1px solid var(--line);}
+  .kcard:active{cursor:grabbing;}
+  .kcard.dragging{opacity:.4;}
+  .kcard .name{font-weight:600;font-size:13.5px;margin-bottom:3px;}
+  .kcard .meta{font-size:11.5px;color:var(--muted);}
+  .kcol.dragover{outline:2px dashed var(--accent);outline-offset:-4px;}
+
+  /* Table */
+  table{width:100%;border-collapse:collapse;background:var(--panel);border-radius:var(--radius);overflow:hidden;}
+  th{text-align:left;font-size:11.5px;text-transform:uppercase;color:var(--muted);padding:10px 12px;border-bottom:1px solid var(--line);background:#fafbfd;}
+  td{padding:10px 12px;font-size:13.5px;border-bottom:1px solid var(--line);}
+  tr:last-child td{border-bottom:none;}
+  tr.clickable:hover{background:#f7f8fd;cursor:pointer;}
+
+  .toolbar{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
+  .toolbar input,.toolbar select{padding:8px 11px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:#fff;}
+  .toolbar input[type=text]{min-width:220px;}
+
+  /* Modal */
+  .overlay{position:fixed;inset:0;background:rgba(15,18,32,.55);display:flex;align-items:flex-start;justify-content:center;padding:30px 16px;overflow-y:auto;z-index:100;}
+  .modal{background:#fff;border-radius:14px;width:100%;max-width:640px;padding:24px 26px;margin-bottom:40px;}
+  .modal.wide{max-width:820px;}
+  .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
+  .modal-head h2{font-size:18px;}
+  .close-x{background:none;border:none;font-size:20px;color:var(--muted);}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .form-grid.one{grid-template-columns:1fr;}
+  .field label{font-size:12px;font-weight:600;color:#4b5063;display:block;margin-bottom:4px;}
+  .field input,.field select,.field textarea{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;background:#fbfbfd;}
+  .field textarea{resize:vertical;min-height:60px;}
+  .field{margin-bottom:12px;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:14px;}
+
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:16px;}
+  .tab{padding:8px 14px;font-size:13px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;}
+  .tab.active{color:var(--accent);border-color:var(--accent);}
+
+  .timeline-item{border-left:2px solid var(--line);padding:2px 0 14px 16px;position:relative;margin-left:4px;}
+  .timeline-item::before{content:'';position:absolute;left:-5px;top:3px;width:8px;height:8px;border-radius:50%;background:var(--accent);}
+  .timeline-item .t-date{font-size:11px;color:var(--muted);}
+  .timeline-item .t-body{font-size:13px;margin-top:2px;}
+
+  .lead-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;}
+  .lead-header .name{font-size:19px;font-weight:700;}
+  .lead-header .company{color:var(--muted);font-size:13px;}
+  .icon-btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:600;color:var(--ink);display:inline-flex;gap:6px;align-items:center;}
+  .icon-btn.call{color:#047857;border-color:#a7f3d0;background:#ecfdf5;}
+  .icon-btn.wa{color:#15803d;border-color:#bbf7d0;background:#f0fdf4;}
+
+  .empty{text-align:center;color:var(--muted);font-size:13.5px;padding:30px 10px;}
+
+  .print-area{display:none;}
+  @media print{
+    body *{visibility:hidden;}
+    .print-area,.print-area *{visibility:visible;}
+    .print-area{display:block;position:absolute;top:0;left:0;width:100%;padding:30px;}
+  }
+  .qtable{width:100%;border-collapse:collapse;margin-top:10px;}
+  .qtable th,.qtable td{border:1px solid #ddd;padding:8px;font-size:13px;}
+  .badge-count{background:var(--accent);color:#fff;font-size:10.5px;border-radius:10px;padding:1px 6px;margin-left:6px;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+// ---------- Storage helpers (Google Sheet backend via Apps Script Web App) ----------
+// PASTE your deployed Google Apps Script Web App URL below (see setup instructions).
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz3BUx0t6c6fK4ESEL46QC1pO-JWeQOdP4f-gLtVXhSM2wTKqW_i0emFzTp0US-kyoZDQ/exec';
+
+let DATA = { leads: [], tasks: [], quotations: [], team: ['Shubham','Telecaller','Digital Marketing Exec'], nextId: 1 };
+let SYNC_OK = true;
+
+async function loadData(){
+  if(!APPS_SCRIPT_URL || APPS_SCRIPT_URL.includes('PASTE_YOUR')){
+    SYNC_OK = false;
+    showSetupBanner();
+    return;
+  }
+  try{
+    const res = await fetch(APPS_SCRIPT_URL, {cache:'no-store'});
+    const text = await res.text();
+    if(text && text.trim()){ DATA = JSON.parse(text); }
+  }catch(e){ console.error('load failed', e); SYNC_OK = false; }
+  if(!DATA.team) DATA.team = ['Shubham','Telecaller','Digital Marketing Exec'];
+  if(!DATA.leads) DATA.leads = [];
+  if(!DATA.tasks) DATA.tasks = [];
+  if(!DATA.quotations) DATA.quotations = [];
+  if(!DATA.nextId) DATA.nextId = 1;
+}
+let saveTimer=null;
+function saveData(){
+  if(!APPS_SCRIPT_URL || APPS_SCRIPT_URL.includes('PASTE_YOUR')) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async ()=>{
+    try{
+      await fetch(APPS_SCRIPT_URL, {
+        method:'POST',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body: JSON.stringify(DATA)
+      });
+    }catch(e){ console.error('save failed', e); }
+  }, 400);
+}
+function showSetupBanner(){
+  const banner = document.createElement('div');
+  banner.style.cssText='position:fixed;top:0;left:0;right:0;background:#fef2f2;color:#991b1b;padding:10px 16px;font-size:13px;text-align:center;z-index:999;border-bottom:1px solid #fecaca;';
+  banner.innerHTML = '⚠️ Google Sheet se connect nahi hua. index.html me APPS_SCRIPT_URL set karein (setup guide dekhen).';
+  document.body.prepend(banner);
+}
+function uid(prefix){ return prefix + '_' + (DATA.nextId++) + '_' + Math.random().toString(36).slice(2,6); }
+
+// ---------- Constants ----------
+const STAGES = ['New Lead','Contacted','Meeting Scheduled','Proposal Sent','Negotiation','Closed Won','Closed Lost'];
+const LEAD_SOURCES = ['Reference','Walk-in','Instagram','Website','Meesho','Cold Call','Other'];
+
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function fmtDate(d){ if(!d) return '—'; const dt = new Date(d+'T00:00:00'); return dt.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); }
+function daysDiff(d){ const t=new Date(todayISO()); const dd=new Date(d); return Math.round((dd-t)/86400000); }
+
+// ---------- App State ----------
+let state = { tab:'dashboard', leadSearch:'', leadFilterStage:'', openLeadId:null, openTaskModal:false, editingTask:null, openQuoteModal:false, editingQuote:null, quoteForLead:null, printQuote:null, newLeadOpen:false, taskFilter:'mine' };
+
+function render(){ document.getElementById('root').innerHTML = App(); attachEvents(); }
+
+// ---------- Root App ----------
+function App(){
+  return `
+  <div class="app">
+    ${Sidebar()}
+    <div class="main">
+      ${Topbar()}
+      ${renderTab()}
+    </div>
+  </div>
+  ${state.openLeadId ? LeadModal(state.openLeadId) : ''}
+  ${state.openTaskModal ? TaskModal() : ''}
+  ${state.openQuoteModal ? QuoteModal() : ''}
+  ${state.printQuote ? PrintArea(state.printQuote) : ''}
+  `;
+}
+
+function Sidebar(){
+  const items = [
+    ['dashboard','📊','Dashboard'],
+    ['kanban','🗂️','Pipeline'],
+    ['leads','👥','Leads'],
+    ['calendar','📅','Calendar'],
+    ['tasks','✅','Tasks'],
+    ['quotations','🧾','Quotations'],
+    ['team','⚙️','Team'],
+  ];
+  return `<div class="sidebar">
+    <div class="brand"><span class="dot"></span> Magix Sales CRM</div>
+    ${items.map(([id,icon,label])=>{
+      let badge='';
+      if(id==='tasks'){ const cnt = DATA.tasks.filter(t=>!t.completed && t.dueDate<=todayISO()).length; if(cnt) badge=`<span class="badge-count">${cnt}</span>`; }
+      return `<div class="nav-item ${state.tab===id?'active':''}" data-nav="${id}"><span class="nav-icon">${icon}</span> ${label} ${badge}</div>`;
+    }).join('')}
+    <div class="sidebar-foot">Magix Animation Institute<br>Sales Workspace</div>
+  </div>`;
+}
+
+function Topbar(){
+  const titles = {dashboard:['Dashboard','Aaj ka overview — calls, meetings, follow-ups'],kanban:['Sales Pipeline','Leads ko stage-wise drag karo'],leads:['Leads','Sare leads ek jagah'],calendar:['Calendar','Meetings, follow-ups aur tasks'],tasks:['Tasks','Team tasks manage karo'],quotations:['Quotations','Quotation banao aur bhejo'],team:['Team','Team members add ya remove karo']};
+  const [t,s] = titles[state.tab];
+  let action = '';
+  if(state.tab==='leads' || state.tab==='kanban') action = `<button class="btn" data-open-new-lead="1">+ New Lead</button>`;
+  if(state.tab==='tasks') action = `<button class="btn" data-open-new-task="1">+ New Task</button>`;
+  if(state.tab==='quotations') action = `<button class="btn" data-open-new-quote="1">+ New Quotation</button>`;
+  return `<div class="topbar"><div><h1>${t}</h1><div class="sub">${s}</div></div>${action}</div>`;
+}
+
+function renderTab(){
+  if(state.tab==='dashboard') return Dashboard();
+  if(state.tab==='kanban') return Kanban();
+  if(state.tab==='leads') return LeadsTable();
+  if(state.tab==='calendar') return CalendarView();
+  if(state.tab==='tasks') return TasksView();
+  if(state.tab==='quotations') return QuotationsView();
+  if(state.tab==='team') return TeamView();
+  return '';
+}
+
+// ---------- Team ----------
+function TeamView(){
+  return `<div class="card" style="max-width:480px;">
+    <div class="panel-title">Team Members</div>
+    ${DATA.team.map((m,idx)=>{
+      const leadCount = DATA.leads.filter(l=>l.assignedTo===m).length;
+      return `<div class="list-row">
+        <span>${m} <span style="color:var(--muted);font-size:11.5px;">(${leadCount} leads)</span></span>
+        <button class="btn danger small" data-remove-member="${idx}">Remove</button>
+      </div>`;
+    }).join('') || `<div class="empty">No team members yet.</div>`}
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <input type="text" id="newMemberInput" placeholder="New member name" style="flex:1;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;">
+      <button class="btn small" data-add-member="1">+ Add</button>
+    </div>
+  </div>`;
+}
+
+// ---------- Dashboard ----------
+function Dashboard(){
+  const leads = DATA.leads;
+  const totalLeads = leads.length;
+  const today = todayISO();
+  const todaysCalls = leads.filter(l=>l.lastContactDate===today).length;
+  const todaysMeetings = leads.filter(l=> (l.meetings||[]).some(m=>m.date===today)).length;
+  const todaysFollowups = leads.filter(l=>l.nextFollowupDate===today).length;
+  const overdue = leads.filter(l=>l.nextFollowupDate && l.nextFollowupDate<today && l.status!=='Closed Won' && l.status!=='Closed Lost');
+  const pendingQuotes = DATA.quotations.filter(q=>q.status!=='Accepted' && q.status!=='Rejected').length;
+  const won = leads.filter(l=>l.status==='Closed Won').length;
+  const lost = leads.filter(l=>l.status==='Closed Lost').length;
+
+  const overdueTasks = DATA.tasks.filter(t=>!t.completed && t.dueDate && t.dueDate<today);
+  const dueTodayTasks = DATA.tasks.filter(t=>!t.completed && t.dueDate===today);
+
+  let alerts = '';
+  if(overdue.length) alerts += `<div class="alert danger"><span>⚠️ ${overdue.length} follow-up(s) overdue</span> <button class="btn small ghost" data-nav="leads">View</button></div>`;
+  if(dueTodayTasks.length) alerts += `<div class="alert"><span>📌 ${dueTodayTasks.length} task(s) due today</span> <button class="btn small ghost" data-nav="tasks">View</button></div>`;
+  if(todaysMeetings.length) alerts += `<div class="alert"><span>📅 ${todaysMeetings.length} meeting(s) today</span> <button class="btn small ghost" data-nav="calendar">View</button></div>`;
+
+  const teamPerf = DATA.team.map(m=>{
+    const owned = leads.filter(l=>l.assignedTo===m);
+    const wonM = owned.filter(l=>l.status==='Closed Won').length;
+    return {m, total:owned.length, won:wonM};
+  });
+
+  const recent = [...leads].sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||'')).slice(0,6);
+
+  return `
+  ${alerts}
+  <div class="grid">
+    <div class="card"><div class="stat-num">${totalLeads}</div><div class="stat-label">Total Leads</div></div>
+    <div class="card"><div class="stat-num">${todaysCalls}</div><div class="stat-label">Today's Calls</div></div>
+    <div class="card"><div class="stat-num">${todaysMeetings}</div><div class="stat-label">Today's Meetings</div></div>
+    <div class="card"><div class="stat-num">${todaysFollowups}</div><div class="stat-label">Today's Follow-ups</div></div>
+    <div class="card"><div class="stat-num" style="color:${overdue.length?'var(--hot)':'inherit'}">${overdue.length}</div><div class="stat-label">Overdue Follow-ups</div></div>
+    <div class="card"><div class="stat-num">${pendingQuotes}</div><div class="stat-label">Pending Quotations</div></div>
+    <div class="card"><div class="stat-num" style="color:var(--win)">${won}</div><div class="stat-label">Closed Won</div></div>
+    <div class="card"><div class="stat-num" style="color:var(--muted)">${lost}</div><div class="stat-label">Closed Lost</div></div>
+  </div>
+  <div class="two-col">
+    <div class="card">
+      <div class="panel-title">Lead Pipeline</div>
+      ${STAGES.map(s=>{
+        const c = leads.filter(l=>l.status===s).length;
+        const max = Math.max(1,...STAGES.map(st=>leads.filter(l=>l.status===st).length));
+        const w = Math.round((c/max)*100);
+        return `<div style="margin-bottom:8px;"><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px;"><span>${s}</span><span>${c}</span></div><div style="background:#eef0f7;border-radius:6px;height:8px;"><div style="width:${w}%;background:var(--accent);height:8px;border-radius:6px;"></div></div></div>`;
+      }).join('')}
+    </div>
+    <div class="card">
+      <div class="panel-title">Team Performance</div>
+      ${teamPerf.map(t=>`<div class="list-row"><span>${t.m}</span><span>${t.total} leads · <b style="color:var(--win)">${t.won} won</b></span></div>`).join('') || `<div class="empty">No team data yet</div>`}
+    </div>
+  </div>
+  <div class="card" style="margin-top:16px;">
+    <div class="panel-title">Recent Activity</div>
+    ${recent.length? recent.map(l=>`<div class="list-row"><span>${l.name} — <span style="color:var(--muted)">${l.company||'—'}</span></span><span class="pill ${pillClass(l)}">${l.status}</span></div>`).join('') : `<div class="empty">No leads yet. Click "+ New Lead" to add your first lead.</div>`}
+  </div>
+  `;
+}
+
+function pillClass(l){
+  if(l.status==='Closed Won') return 'won';
+  if(l.status==='Closed Lost') return 'lost';
+  if(l.priority==='Hot') return 'hot';
+  if(l.priority==='Warm') return 'warm';
+  return 'cold';
+}
+
+// ---------- Kanban ----------
+function Kanban(){
+  return `<div class="kanban">
+    ${STAGES.map(stage=>{
+      const items = DATA.leads.filter(l=>l.status===stage);
+      return `<div class="kcol" data-stage-col="${stage}">
+        <div class="kcol-head"><span>${stage}</span><span>${items.length}</span></div>
+        ${items.map(l=>`
+          <div class="kcard" draggable="true" data-lead-id="${l.id}">
+            <div class="name">${l.name}</div>
+            <div class="meta">${l.company||'—'}</div>
+            <div class="meta" style="margin-top:5px;"><span class="pill ${l.priority?.toLowerCase()||'cold'}">${l.priority||'—'}</span></div>
+            ${l.nextFollowupDate? `<div class="meta" style="margin-top:5px;">Next: ${fmtDate(l.nextFollowupDate)}</div>`:''}
+          </div>`).join('') || `<div class="empty" style="padding:14px 4px;">Drop leads here</div>`}
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+// ---------- Leads Table ----------
+function LeadsTable(){
+  let leads = DATA.leads;
+  if(state.leadSearch){
+    const q = state.leadSearch.toLowerCase();
+    leads = leads.filter(l=>(l.name+l.company+l.contact+l.email).toLowerCase().includes(q));
+  }
+  if(state.leadFilterStage) leads = leads.filter(l=>l.status===state.leadFilterStage);
+
+  return `
+  <div class="toolbar">
+    <input type="text" placeholder="Search name, company, number..." id="leadSearchInput" value="${state.leadSearch}">
+    <select id="leadStageFilter">
+      <option value="">All Stages</option>
+      ${STAGES.map(s=>`<option value="${s}" ${state.leadFilterStage===s?'selected':''}>${s}</option>`).join('')}
+    </select>
+  </div>
+  <table>
+    <thead><tr><th>Name</th><th>Company</th><th>Contact</th><th>Priority</th><th>Stage</th><th>Assigned</th><th>Next Follow-up</th></tr></thead>
+    <tbody>
+      ${leads.map(l=>`
+        <tr class="clickable" data-open-lead="${l.id}">
+          <td><b>${l.name}</b></td>
+          <td>${l.company||'—'}</td>
+          <td>${l.contact||'—'}</td>
+          <td><span class="pill ${l.priority?.toLowerCase()||'cold'}">${l.priority||'—'}</span></td>
+          <td><span class="pill ${pillClass(l)}">${l.status}</span></td>
+          <td>${l.assignedTo||'—'}</td>
+          <td style="color:${l.nextFollowupDate && l.nextFollowupDate<todayISO() && l.status!=='Closed Won' && l.status!=='Closed Lost' ?'var(--hot)':'inherit'}">${fmtDate(l.nextFollowupDate)}</td>
+        </tr>`).join('') || `<tr><td colspan="7"><div class="empty">No leads found. Click "+ New Lead" to add one.</div></td></tr>`}
+    </tbody>
+  </table>
+  `;
+}
+
+// ---------- Calendar ----------
+function getAllEvents(){
+  const events = [];
+  DATA.leads.forEach(l=>{
+    (l.meetings||[]).forEach(m=>{ if(m.date) events.push({date:m.date, type:'Meeting', title:l.name, sub:m.type||'Meeting', leadId:l.id}); });
+    if(l.nextFollowupDate) events.push({date:l.nextFollowupDate, type:'Follow-up', title:l.name, sub:l.status, leadId:l.id});
+  });
+  DATA.tasks.forEach(t=>{ if(!t.completed && t.dueDate) events.push({date:t.dueDate, type:'Task', title:t.title, sub:'Assigned: '+(t.assignedTo||'—'), taskId:t.id}); });
+  return events;
+}
+
+function CalendarView(){
+  if(!state.calMonth){ const n = new Date(); state.calMonth = n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0'); }
+  if(!state.calSelectedDate) state.calSelectedDate = todayISO();
+
+  const [yr, mo] = state.calMonth.split('-').map(Number);
+  const firstOfMonth = new Date(yr, mo-1, 1);
+  const startWeekday = firstOfMonth.getDay(); // 0=Sun
+  const daysInMonth = new Date(yr, mo, 0).getDate();
+  const monthLabel = firstOfMonth.toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+  const today = todayISO();
+
+  const events = getAllEvents();
+  const byDate = {};
+  events.forEach(e=>{ (byDate[e.date]=byDate[e.date]||[]).push(e); });
+
+  const cells = [];
+  for(let i=0;i<startWeekday;i++) cells.push(null);
+  for(let d=1; d<=daysInMonth; d++) cells.push(d);
+  while(cells.length % 7 !== 0) cells.push(null);
+
+  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  const gridHtml = `
+    <div class="card" style="padding:14px 16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <button class="btn ghost small" data-cal-nav="-1">‹ Prev</button>
+        <h3 style="font-size:15px;">${monthLabel}</h3>
+        <button class="btn ghost small" data-cal-nav="1">Next ›</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:4px;">
+        ${dayNames.map(d=>`<div style="text-align:center;font-size:11px;font-weight:700;color:var(--muted);padding:4px 0;">${d}</div>`).join('')}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;">
+        ${cells.map(d=>{
+          if(!d) return `<div style="min-height:70px;"></div>`;
+          const dateStr = `${yr}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+          const dayEvents = byDate[dateStr]||[];
+          const isToday = dateStr===today;
+          const isSelected = dateStr===state.calSelectedDate;
+          return `<div data-cal-day="${dateStr}" style="min-height:70px;border-radius:9px;padding:6px;cursor:pointer;border:1px solid ${isSelected?'var(--accent)':'var(--line)'};background:${isToday?'#eef1ff':'#fff'};">
+            <div style="font-size:12px;font-weight:${isToday?'800':'600'};color:${isToday?'var(--accent)':'inherit'};margin-bottom:4px;">${d}</div>
+            ${dayEvents.slice(0,2).map(e=>`<div style="font-size:9.5px;padding:1px 5px;border-radius:5px;margin-bottom:2px;background:${e.type==='Meeting'?'#dbeafe':e.type==='Task'?'#fef3c7':'#fee2e2'};color:${e.type==='Meeting'?'#1d4ed8':e.type==='Task'?'#b45309':'#b91c1c'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.title}</div>`).join('')}
+            ${dayEvents.length>2? `<div style="font-size:9.5px;color:var(--muted);">+${dayEvents.length-2} more</div>`:''}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+
+  const selEvents = (byDate[state.calSelectedDate]||[]).sort((a,b)=>a.type.localeCompare(b.type));
+  const sideHtml = `
+    <div class="card">
+      <div class="panel-title">${state.calSelectedDate===today?'Today':fmtDate(state.calSelectedDate)}</div>
+      ${selEvents.length? selEvents.map(e=>`
+        <div class="list-row" ${e.leadId?`data-open-lead="${e.leadId}"`:''} style="${e.leadId?'cursor:pointer':''}">
+          <span><span class="pill ${e.type==='Meeting'?'cold':e.type==='Task'?'warm':'hot'}">${e.type}</span> &nbsp;${e.title}</span>
+          <span style="color:var(--muted);font-size:11.5px;">${e.sub}</span>
+        </div>`).join('') : `<div class="empty">Kuch bhi scheduled nahi hai is din.</div>`}
+    </div>`;
+
+  return `<div class="two-col">${gridHtml}${sideHtml}</div>`;
+}
+
+// ---------- Tasks ----------
+function TasksView(){
+  let tasks = DATA.tasks;
+  return `
+  <div class="toolbar">
+    <select id="taskFilterSel">
+      <option value="all" ${state.taskFilter==='all'?'selected':''}>All Tasks</option>
+      ${DATA.team.map(m=>`<option value="${m}" ${state.taskFilter===m?'selected':''}>Assigned to ${m}</option>`).join('')}
+    </select>
+  </div>
+  ${(state.taskFilter==='all'?tasks:tasks.filter(t=>t.assignedTo===state.taskFilter)).length? '' : ''}
+  <table>
+    <thead><tr><th></th><th>Task</th><th>Related Lead</th><th>Assigned To</th><th>Priority</th><th>Due Date</th><th></th></tr></thead>
+    <tbody>
+    ${(state.taskFilter==='all'?tasks:tasks.filter(t=>t.assignedTo===state.taskFilter)).map(t=>{
+      const lead = DATA.leads.find(l=>l.id===t.leadId);
+      const overdue = !t.completed && t.dueDate && t.dueDate<todayISO();
+      return `<tr>
+        <td><input type="checkbox" data-toggle-task="${t.id}" ${t.completed?'checked':''}></td>
+        <td style="${t.completed?'text-decoration:line-through;color:var(--muted);':''}"><b>${t.title}</b></td>
+        <td>${lead? `<a href="#" data-open-lead="${lead.id}" style="color:var(--accent);">${lead.name}</a>`:'—'}</td>
+        <td>${t.assignedTo||'—'}</td>
+        <td><span class="pill ${t.priority==='High'?'hot':t.priority==='Medium'?'warm':'cold'}">${t.priority}</span></td>
+        <td style="color:${overdue?'var(--hot)':'inherit'}">${fmtDate(t.dueDate)}</td>
+        <td><button class="btn ghost small" data-edit-task="${t.id}">Edit</button></td>
+      </tr>`;
+    }).join('') || `<tr><td colspan="7"><div class="empty">No tasks yet. Click "+ New Task" to create one.</div></td></tr>`}
+    </tbody>
+  </table>
+  `;
+}
+
+// ---------- Quotations ----------
+function QuotationsView(){
+  return `<table>
+    <thead><tr><th>Quote #</th><th>Client</th><th>Amount</th><th>Status</th><th>Date</th><th></th></tr></thead>
+    <tbody>
+    ${DATA.quotations.map(q=>{
+      const total = q.items.reduce((s,i)=>s+i.qty*i.price,0) * (1+(q.taxPercent||0)/100);
+      return `<tr>
+        <td><b>${q.number}</b></td>
+        <td>${q.clientName}</td>
+        <td>₹${total.toFixed(0)}</td>
+        <td><select data-quote-status="${q.id}">
+          ${['Draft','Sent','Accepted','Rejected'].map(s=>`<option ${q.status===s?'selected':''}>${s}</option>`).join('')}
+        </select></td>
+        <td>${fmtDate(q.date)}</td>
+        <td>
+          <button class="btn ghost small" data-print-quote="${q.id}">🖨 PDF</button>
+          <button class="btn ghost small" data-wa-quote="${q.id}">WhatsApp</button>
+        </td>
+      </tr>`;
+    }).join('') || `<tr><td colspan="6"><div class="empty">No quotations yet. Click "+ New Quotation" to create one.</div></td></tr>`}
+    </tbody>
+  </table>`;
+}
+
+// ---------- Lead Modal ----------
+function LeadModal(id){
+  const l = DATA.leads.find(x=>x.id===id);
+  if(!l) return '';
+  const tab = l._modalTab || 'overview';
+  const telHref = l.contact ? `tel:${l.contact.replace(/\s+/g,'')}` : '#';
+  const waHref = l.whatsapp ? `https://wa.me/${l.whatsapp.replace(/\D/g,'')}` : '#';
+
+  const timeline = [];
+  (l.meetings||[]).forEach(m=> timeline.push({date:m.date, label:`Meeting (${m.type||'—'})`, body:m.outcome||m.notes||''}));
+  (l.calls||[]).forEach(c=> timeline.push({date:c.date, label:`Call — ${c.outcome||'—'}`, body:c.notes||''}));
+  (l.statusLog||[]).forEach(s=> timeline.push({date:s.date, label:`Stage → ${s.status}`, body:''}));
+  timeline.sort((a,b)=>b.date.localeCompare(a.date));
+
+  return `<div class="overlay" data-close-overlay="lead">
+    <div class="modal wide" data-stop>
+      <div class="lead-header">
+        <div>
+          <div class="name">${l.name}</div>
+          <div class="company">${l.company||'—'} · <span class="pill ${pillClass(l)}">${l.status}</span> <span class="pill ${l.priority?.toLowerCase()||'cold'}">${l.priority||'—'}</span></div>
+        </div>
+        <button class="close-x" data-close-overlay="lead">✕</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+        <a class="icon-btn call" href="${telHref}">📞 Call ${l.contact||''}</a>
+        ${l.whatsapp?`<a class="icon-btn wa" href="${waHref}" target="_blank">💬 WhatsApp</a>`:''}
+        <button class="icon-btn" data-log-call="${l.id}">📝 Log Call</button>
+        <button class="icon-btn" data-log-meeting="${l.id}">🤝 Log Meeting</button>
+        <button class="icon-btn" data-open-new-quote-for="${l.id}">🧾 Create Quotation</button>
+        <button class="icon-btn" data-edit-lead="${l.id}">✏️ Edit Lead</button>
+      </div>
+      <div class="tabs">
+        <div class="tab ${tab==='overview'?'active':''}" data-lead-tab="overview">Overview</div>
+        <div class="tab ${tab==='timeline'?'active':''}" data-lead-tab="timeline">Timeline</div>
+        <div class="tab ${tab==='stage'?'active':''}" data-lead-tab="stage">Move Stage</div>
+      </div>
+      ${tab==='overview' ? `
+        <div class="form-grid">
+          <div><div class="stat-label">Contact</div><div>${l.contact||'—'}</div></div>
+          <div><div class="stat-label">WhatsApp</div><div>${l.whatsapp||'—'}</div></div>
+          <div><div class="stat-label">Email</div><div>${l.email||'—'}</div></div>
+          <div><div class="stat-label">Address</div><div>${l.address||'—'}</div></div>
+          <div><div class="stat-label">Lead Source</div><div>${l.source||'—'}</div></div>
+          <div><div class="stat-label">Assigned To</div><div>${l.assignedTo||'—'}</div></div>
+          <div><div class="stat-label">Last Contact</div><div>${fmtDate(l.lastContactDate)}</div></div>
+          <div><div class="stat-label">Next Follow-up</div><div>${fmtDate(l.nextFollowupDate)}</div></div>
+        </div>
+        <div style="margin-top:10px;"><div class="stat-label">Notes</div><div style="font-size:13.5px;margin-top:4px;">${l.notes||'—'}</div></div>
+      ` : ''}
+      ${tab==='timeline' ? `
+        <div>${timeline.length? timeline.map(t=>`<div class="timeline-item"><div class="t-date">${fmtDate(t.date)}</div><div class="t-body"><b>${t.label}</b>${t.body?' — '+t.body:''}</div></div>`).join('') : `<div class="empty">No activity yet.</div>`}</div>
+      ` : ''}
+      ${tab==='stage' ? `
+        <div class="form-grid one">
+          <div class="field"><label>Pipeline Stage</label>
+            <select id="stageSelect">${STAGES.map(s=>`<option ${l.status===s?'selected':''}>${s}</option>`).join('')}</select>
+          </div>
+          <button class="btn" data-save-stage="${l.id}" style="width:fit-content;">Update Stage</button>
+        </div>
+      ` : ''}
+    </div>
+  </div>`;
+}
+
+// ---------- New / Edit Lead Modal reused via TaskModal-style pattern ----------
+function LeadFormModal(lead){
+  const editing = !!lead;
+  const l = lead || {name:'',company:'',contact:'',whatsapp:'',email:'',address:'',source:'',priority:'Warm',status:'New Lead',assignedTo:DATA.team[0],notes:'',lastContactDate:'',nextFollowupDate:''};
+  return `<div class="overlay" data-close-overlay="leadform">
+    <div class="modal" data-stop>
+      <div class="modal-head"><h2>${editing?'Edit Lead':'New Lead'}</h2><button class="close-x" data-close-overlay="leadform">✕</button></div>
+      <div class="form-grid">
+        <div class="field"><label>Client Name*</label><input id="f_name" value="${l.name}"></div>
+        <div class="field"><label>Company Name</label><input id="f_company" value="${l.company}"></div>
+        <div class="field"><label>Contact Number*</label><input id="f_contact" value="${l.contact}"></div>
+        <div class="field"><label>WhatsApp Number</label><input id="f_whatsapp" value="${l.whatsapp}"></div>
+        <div class="field"><label>Email</label><input id="f_email" value="${l.email}"></div>
+        <div class="field"><label>Lead Source</label><select id="f_source">${['',...LEAD_SOURCES].map(s=>`<option ${l.source===s?'selected':''}>${s}</option>`).join('')}</select></div>
+        <div class="field"><label>Priority</label><select id="f_priority">${['Hot','Warm','Cold'].map(s=>`<option ${l.priority===s?'selected':''}>${s}</option>`).join('')}</select></div>
+        <div class="field"><label>Assigned To</label><select id="f_assigned">${DATA.team.map(s=>`<option ${l.assignedTo===s?'selected':''}>${s}</option>`).join('')}</select></div>
+        <div class="field"><label>Stage</label><select id="f_status">${STAGES.map(s=>`<option ${l.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
+        <div class="field"><label>Next Follow-up Date</label><input type="date" id="f_followup" value="${l.nextFollowupDate||''}"></div>
+      </div>
+      <div class="field"><label>Address</label><input id="f_address" value="${l.address}"></div>
+      <div class="field"><label>Notes</label><textarea id="f_notes">${l.notes||''}</textarea></div>
+      <div class="modal-actions">
+        <button class="btn secondary" data-close-overlay="leadform">Cancel</button>
+        <button class="btn" data-save-lead="${editing?l.id:''}">${editing?'Save Changes':'Add Lead'}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ---------- Call / Meeting log modals ----------
+function CallLogModal(leadId){
+  return `<div class="overlay" data-close-overlay="calllog">
+    <div class="modal" data-stop>
+      <div class="modal-head"><h2>Log Call</h2><button class="close-x" data-close-overlay="calllog">✕</button></div>
+      <div class="field"><label>Call Outcome</label><select id="cl_outcome">${['Connected','No Answer','Busy','Switched Off','Interested','Not Interested','Call Back Later'].map(o=>`<option>${o}</option>`).join('')}</select></div>
+      <div class="field"><label>Call Notes</label><textarea id="cl_notes"></textarea></div>
+      <div class="field"><label>Next Follow-up Date</label><input type="date" id="cl_followup"></div>
+      <div class="modal-actions">
+        <button class="btn secondary" data-close-overlay="calllog">Cancel</button>
+        <button class="btn" data-save-call="${leadId}">Save Call Log</button>
+      </div>
+    </div>
+  </div>`;
+}
+function MeetingLogModal(leadId){
+  return `<div class="overlay" data-close-overlay="meetinglog">
+    <div class="modal" data-stop>
+      <div class="modal-head"><h2>Log Meeting</h2><button class="close-x" data-close-overlay="meetinglog">✕</button></div>
+      <div class="form-grid">
+        <div class="field"><label>Meeting Date</label><input type="date" id="ml_date" value="${todayISO()}"></div>
+        <div class="field"><label>Meeting Type</label><select id="ml_type">${['Site Visit','Office Meeting','Google Meet','Phone Meeting'].map(o=>`<option>${o}</option>`).join('')}</select></div>
+      </div>
+      <div class="field"><label>Meeting Outcome</label><input id="ml_outcome" placeholder="e.g. Interested, needs proposal"></div>
+      <div class="field"><label>Discussion Notes / Client Requirements</label><textarea id="ml_notes"></textarea></div>
+      <div class="field"><label>Next Action / Follow-up Date</label><input type="date" id="ml_followup"></div>
+      <div class="modal-actions">
+        <button class="btn secondary" data-close-overlay="meetinglog">Cancel</button>
+        <button class="btn" data-save-meeting="${leadId}">Save Meeting</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ---------- Task Modal ----------
+function TaskModal(){
+  const t = state.editingTask || {title:'',leadId:'',assignedTo:DATA.team[0],priority:'Medium',dueDate:todayISO(),completed:false};
+  return `<div class="overlay" data-close-overlay="task">
+    <div class="modal" data-stop>
+      <div class="modal-head"><h2>${state.editingTask?'Edit Task':'New Task'}</h2><button class="close-x" data-close-overlay="task">✕</button></div>
+      <div class="field"><label>Task Title*</label><input id="t_title" value="${t.title}"></div>
+      <div class="form-grid">
+        <div class="field"><label>Related Lead (optional)</label><select id="t_lead"><option value="">— None —</option>${DATA.leads.map(l=>`<option value="${l.id}" ${t.leadId===l.id?'selected':''}>${l.name}</option>`).join('')}</select></div>
+        <div class="field"><label>Assign To</label><select id="t_assigned">${DATA.team.map(m=>`<option ${t.assignedTo===m?'selected':''}>${m}</option>`).join('')}</select></div>
+        <div class="field"><label>Priority</label><select id="t_priority">${['High','Medium','Low'].map(p=>`<option ${t.priority===p?'selected':''}>${p}</option>`).join('')}</select></div>
+        <div class="field"><label>Due Date</label><input type="date" id="t_due" value="${t.dueDate||''}"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn secondary" data-close-overlay="task">Cancel</button>
+        <button class="btn" data-save-task="${t.id||''}">${state.editingTask?'Save Changes':'Create Task'}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ---------- Quote Modal ----------
+function QuoteModal(){
+  const q = state.editingQuote || {number:'MAG-'+String(DATA.quotations.length+1).padStart(3,'0'), leadId: state.quoteForLead||'', clientName:'', date:todayISO(), taxPercent:0, items:[{desc:'',qty:1,price:0}], notes:''};
+  if(q.leadId && !q.clientName){ const ld = DATA.leads.find(l=>l.id===q.leadId); if(ld) q.clientName = ld.name; }
+  return `<div class="overlay" data-close-overlay="quote">
+    <div class="modal wide" data-stop>
+      <div class="modal-head"><h2>${state.editingQuote?'Edit Quotation':'New Quotation'}</h2><button class="close-x" data-close-overlay="quote">✕</button></div>
+      <div class="form-grid">
+        <div class="field"><label>Quote Number</label><input id="q_number" value="${q.number}"></div>
+        <div class="field"><label>Link to Lead</label><select id="q_lead"><option value="">— None —</option>${DATA.leads.map(l=>`<option value="${l.id}" ${q.leadId===l.id?'selected':''}>${l.name}</option>`).join('')}</select></div>
+        <div class="field"><label>Client Name</label><input id="q_client" value="${q.clientName}"></div>
+        <div class="field"><label>Date</label><input type="date" id="q_date" value="${q.date}"></div>
+        <div class="field"><label>Tax %</label><input type="number" id="q_tax" value="${q.taxPercent||0}"></div>
+      </div>
+      <div class="panel-title">Items</div>
+      <div id="q_items_wrap">
+        ${q.items.map((it,idx)=>`
+          <div class="form-grid" style="grid-template-columns:2fr 1fr 1fr auto;align-items:end;" data-item-row="${idx}">
+            <div class="field"><label>${idx===0?'Description':''}</label><input class="qi_desc" value="${it.desc}"></div>
+            <div class="field"><label>${idx===0?'Qty':''}</label><input type="number" class="qi_qty" value="${it.qty}"></div>
+            <div class="field"><label>${idx===0?'Price (₹)':''}</label><input type="number" class="qi_price" value="${it.price}"></div>
+            <div class="field"><button class="btn danger small" data-remove-item="${idx}">✕</button></div>
+          </div>`).join('')}
+      </div>
+      <button class="btn ghost small" data-add-item="1">+ Add Item</button>
+      <div class="field" style="margin-top:12px;"><label>Notes / Terms</label><textarea id="q_notes">${q.notes||''}</textarea></div>
+      <div class="modal-actions">
+        <button class="btn secondary" data-close-overlay="quote">Cancel</button>
+        <button class="btn" data-save-quote="${q.id||''}">Save Quotation</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function PrintArea(qid){
+  const q = DATA.quotations.find(x=>x.id===qid);
+  if(!q) return '';
+  const subtotal = q.items.reduce((s,i)=>s+i.qty*i.price,0);
+  const tax = subtotal * (q.taxPercent||0)/100;
+  const total = subtotal+tax;
+  setTimeout(()=>{ window.print(); }, 300);
+  return `<div class="print-area">
+    <h1 style="margin-bottom:2px;">Magix Animation Institute</h1>
+    <div style="color:#666;margin-bottom:20px;">Quotation ${q.number} — ${fmtDate(q.date)}</div>
+    <div style="margin-bottom:14px;"><b>To:</b> ${q.clientName}</div>
+    <table class="qtable">
+      <thead><tr><th>Description</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead>
+      <tbody>
+        ${q.items.map(i=>`<tr><td>${i.desc}</td><td>${i.qty}</td><td>₹${i.price}</td><td>₹${(i.qty*i.price).toFixed(0)}</td></tr>`).join('')}
+      </tbody>
+    </table>
+    <div style="text-align:right;margin-top:10px;">
+      <div>Subtotal: ₹${subtotal.toFixed(0)}</div>
+      <div>Tax (${q.taxPercent||0}%): ₹${tax.toFixed(0)}</div>
+      <div style="font-weight:700;font-size:16px;">Total: ₹${total.toFixed(0)}</div>
+    </div>
+    ${q.notes? `<div style="margin-top:16px;"><b>Notes:</b> ${q.notes}</div>`:''}
+  </div>`;
+}
+
+// ---------- Event wiring ----------
+function attachEvents(){
+  document.querySelectorAll('[data-nav]').forEach(el=>el.onclick=()=>{ state.tab = el.dataset.nav; render(); });
+  document.querySelectorAll('[data-open-lead]').forEach(el=>el.onclick=(e)=>{ e.preventDefault(); state.openLeadId = el.dataset.openLead; render(); });
+  document.querySelectorAll('[data-close-overlay]').forEach(el=>el.onclick=(e)=>{
+    if(e.target!==el) return;
+    const type = el.dataset.closeOverlay;
+    if(type==='lead') state.openLeadId=null;
+    if(type==='leadform'){ state.newLeadOpen=false; state.editingLead=null; }
+    if(type==='task'){ state.openTaskModal=false; state.editingTask=null; }
+    if(type==='quote'){ state.openQuoteModal=false; state.editingQuote=null; state.quoteForLead=null; }
+    if(type==='calllog') state.callLogFor=null;
+    if(type==='meetinglog') state.meetingLogFor=null;
+    render();
+  });
+  document.querySelectorAll('[data-stop]').forEach(el=>el.onclick=(e)=>e.stopPropagation());
+
+  const searchInput = document.getElementById('leadSearchInput');
+  if(searchInput){ searchInput.oninput = ()=>{ state.leadSearch = searchInput.value; renderTabOnly(); }; }
+  const stageFilter = document.getElementById('leadStageFilter');
+  if(stageFilter){ stageFilter.onchange = ()=>{ state.leadFilterStage = stageFilter.value; render(); }; }
+  const taskFilterSel = document.getElementById('taskFilterSel');
+  if(taskFilterSel){ taskFilterSel.onchange = ()=>{ state.taskFilter = taskFilterSel.value; render(); }; }
+
+  document.querySelectorAll('[data-open-new-lead]').forEach(el=>el.onclick=()=>{ state.editingLead=null; injectOverlay(LeadFormModal(null)); });
+  document.querySelectorAll('[data-edit-lead]').forEach(el=>el.onclick=()=>{
+    const lead = DATA.leads.find(l=>l.id===el.dataset.editLead);
+    injectOverlay(LeadFormModal(lead));
+  });
+  document.querySelectorAll('[data-save-lead]').forEach(el=>el.onclick=()=>{
+    const id = el.dataset.saveLead;
+    const vals = {
+      name: val('f_name'), company: val('f_company'), contact: val('f_contact'), whatsapp: val('f_whatsapp'),
+      email: val('f_email'), source: val('f_source'), priority: val('f_priority'), assignedTo: val('f_assigned'),
+      status: val('f_status'), nextFollowupDate: val('f_followup'), address: val('f_address'), notes: val('f_notes'),
+      updatedAt: new Date().toISOString()
+    };
+    if(!vals.name || !vals.contact){ alert('Client Name aur Contact Number required hai'); return; }
+    if(id){
+      const lead = DATA.leads.find(l=>l.id===id);
+      Object.assign(lead, vals);
+    } else {
+      DATA.leads.push({ id: uid('lead'), ...vals, meetings:[], calls:[], statusLog:[{date:todayISO(),status:vals.status}], lastContactDate:'' });
+    }
+    saveData(); removeOverlay(); render();
+  });
+
+  document.querySelectorAll('[data-log-call]').forEach(el=>el.onclick=()=>injectOverlay(CallLogModal(el.dataset.logCall)));
+  document.querySelectorAll('[data-save-call]').forEach(el=>el.onclick=()=>{
+    const lead = DATA.leads.find(l=>l.id===el.dataset.saveCall);
+    lead.calls = lead.calls||[];
+    lead.calls.push({date:todayISO(), outcome:val('cl_outcome'), notes:val('cl_notes')});
+    lead.lastContactDate = todayISO();
+    if(val('cl_followup')) lead.nextFollowupDate = val('cl_followup');
+    lead.updatedAt = new Date().toISOString();
+    saveData(); removeOverlay(); render();
+  });
+
+  document.querySelectorAll('[data-log-meeting]').forEach(el=>el.onclick=()=>injectOverlay(MeetingLogModal(el.dataset.logMeeting)));
+  document.querySelectorAll('[data-save-meeting]').forEach(el=>el.onclick=()=>{
+    const lead = DATA.leads.find(l=>l.id===el.dataset.saveMeeting);
+    lead.meetings = lead.meetings||[];
+    lead.meetings.push({date:val('ml_date'), type:val('ml_type'), outcome:val('ml_outcome'), notes:val('ml_notes')});
+    if(val('ml_followup')) lead.nextFollowupDate = val('ml_followup');
+    lead.updatedAt = new Date().toISOString();
+    saveData(); removeOverlay(); render();
+  });
+
+  document.querySelectorAll('[data-lead-tab]').forEach(el=>el.onclick=()=>{
+    const lead = DATA.leads.find(l=>l.id===state.openLeadId);
+    lead._modalTab = el.dataset.leadTab;
+    render();
+  });
+  document.querySelectorAll('[data-save-stage]').forEach(el=>el.onclick=()=>{
+    const lead = DATA.leads.find(l=>l.id===el.dataset.saveStage);
+    const newStatus = document.getElementById('stageSelect').value;
+    lead.status = newStatus;
+    lead.statusLog = lead.statusLog||[];
+    lead.statusLog.push({date:todayISO(), status:newStatus});
+    lead.updatedAt = new Date().toISOString();
+    saveData(); render();
+  });
+
+  // Kanban drag and drop
+  document.querySelectorAll('.kcard').forEach(card=>{
+    card.addEventListener('dragstart', ()=>{ card.classList.add('dragging'); card._id = card.dataset.leadId; });
+    card.addEventListener('dragend', ()=>{ card.classList.remove('dragging'); });
+  });
+  document.querySelectorAll('.kcol').forEach(col=>{
+    col.addEventListener('dragover', (e)=>{ e.preventDefault(); col.classList.add('dragover'); });
+    col.addEventListener('dragleave', ()=>col.classList.remove('dragover'));
+    col.addEventListener('drop', (e)=>{
+      e.preventDefault(); col.classList.remove('dragover');
+      const dragging = document.querySelector('.kcard.dragging');
+      if(!dragging) return;
+      const leadId = dragging.dataset.leadId;
+      const lead = DATA.leads.find(l=>l.id===leadId);
+      const newStage = col.dataset.stageCol;
+      if(lead.status!==newStage){
+        lead.status = newStage;
+        lead.statusLog = lead.statusLog||[];
+        lead.statusLog.push({date:todayISO(), status:newStage});
+        lead.updatedAt = new Date().toISOString();
+        saveData();
+      }
+      render();
+    });
+  });
+
+  // Tasks
+  document.querySelectorAll('[data-open-new-task]').forEach(el=>el.onclick=()=>{ state.editingTask=null; state.openTaskModal=true; render(); });
+  document.querySelectorAll('[data-edit-task]').forEach(el=>el.onclick=()=>{ state.editingTask = DATA.tasks.find(t=>t.id===el.dataset.editTask); state.openTaskModal=true; render(); });
+  document.querySelectorAll('[data-save-task]').forEach(el=>el.onclick=()=>{
+    const id = el.dataset.saveTask;
+    const vals = { title: val('t_title'), leadId: val('t_lead'), assignedTo: val('t_assigned'), priority: val('t_priority'), dueDate: val('t_due') };
+    if(!vals.title){ alert('Task title required'); return; }
+    if(id){ Object.assign(DATA.tasks.find(t=>t.id===id), vals); }
+    else { DATA.tasks.push({ id: uid('task'), ...vals, completed:false }); }
+    saveData(); state.openTaskModal=false; state.editingTask=null; render();
+  });
+  document.querySelectorAll('[data-toggle-task]').forEach(el=>el.onchange=()=>{
+    const t = DATA.tasks.find(x=>x.id===el.dataset.toggleTask);
+    t.completed = el.checked; saveData(); render();
+  });
+
+  // Quotes
+  document.querySelectorAll('[data-open-new-quote]').forEach(el=>el.onclick=()=>{ state.editingQuote=null; state.quoteForLead=null; state.openQuoteModal=true; render(); });
+  document.querySelectorAll('[data-open-new-quote-for]').forEach(el=>el.onclick=()=>{ state.editingQuote=null; state.quoteForLead=el.dataset.openNewQuoteFor; state.openQuoteModal=true; state.openLeadId=null; render(); });
+  document.querySelectorAll('[data-add-item]').forEach(el=>el.onclick=()=>{
+    const q = state.editingQuote || (state.editingQuote = {number:val('q_number'),leadId:val('q_lead'),clientName:val('q_client'),date:val('q_date'),taxPercent:val('q_tax'),items:collectItems(),notes:val('q_notes')});
+    q.items = collectItems(); q.items.push({desc:'',qty:1,price:0});
+    q.number=val('q_number'); q.leadId=val('q_lead'); q.clientName=val('q_client'); q.date=val('q_date'); q.taxPercent=val('q_tax'); q.notes=val('q_notes');
+    render();
+  });
+  document.querySelectorAll('[data-remove-item]').forEach(el=>el.onclick=()=>{
+    const idx = parseInt(el.dataset.removeItem);
+    const items = collectItems(); items.splice(idx,1);
+    const q = state.editingQuote || {number:val('q_number'),leadId:val('q_lead'),clientName:val('q_client'),date:val('q_date'),taxPercent:val('q_tax'),notes:val('q_notes')};
+    q.items = items.length?items:[{desc:'',qty:1,price:0}];
+    state.editingQuote = q;
+    render();
+  });
+  document.querySelectorAll('[data-save-quote]').forEach(el=>el.onclick=()=>{
+    const id = el.dataset.saveQuote;
+    const vals = { number: val('q_number'), leadId: val('q_lead'), clientName: val('q_client'), date: val('q_date'), taxPercent: parseFloat(val('q_tax'))||0, items: collectItems(), notes: val('q_notes') };
+    if(!vals.clientName){ alert('Client name required'); return; }
+    if(id){ Object.assign(DATA.quotations.find(q=>q.id===id), vals); }
+    else { DATA.quotations.push({ id: uid('quote'), ...vals, status:'Draft' }); }
+    saveData(); state.openQuoteModal=false; state.editingQuote=null; state.quoteForLead=null; state.tab='quotations'; render();
+  });
+  document.querySelectorAll('[data-quote-status]').forEach(el=>el.onchange=()=>{
+    const q = DATA.quotations.find(x=>x.id===el.dataset.quoteStatus);
+    q.status = el.value; saveData();
+  });
+  document.querySelectorAll('[data-print-quote]').forEach(el=>el.onclick=()=>{ state.printQuote = el.dataset.printQuote; render(); setTimeout(()=>{state.printQuote=null;},1000); });
+  // Calendar
+  document.querySelectorAll('[data-cal-nav]').forEach(el=>el.onclick=()=>{
+    const [yr,mo] = state.calMonth.split('-').map(Number);
+    const d = new Date(yr, mo-1+parseInt(el.dataset.calNav), 1);
+    state.calMonth = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    render();
+  });
+  document.querySelectorAll('[data-cal-day]').forEach(el=>el.onclick=()=>{ state.calSelectedDate = el.dataset.calDay; render(); });
+
+  // Team
+  document.querySelectorAll('[data-add-member]').forEach(el=>el.onclick=()=>{
+    const inp = document.getElementById('newMemberInput');
+    const name = inp.value.trim();
+    if(!name) return;
+    if(DATA.team.includes(name)){ alert('Ye member already added hai'); return; }
+    DATA.team.push(name); saveData(); render();
+  });
+  document.querySelectorAll('[data-remove-member]').forEach(el=>el.onclick=()=>{
+    const idx = parseInt(el.dataset.removeMember);
+    const name = DATA.team[idx];
+    if(!confirm(`${name} ko team se remove karein?`)) return;
+    DATA.team.splice(idx,1); saveData(); render();
+  });
+
+  document.querySelectorAll('[data-wa-quote]').forEach(el=>el.onclick=()=>{
+    const q = DATA.quotations.find(x=>x.id===el.dataset.waQuote);
+    const total = q.items.reduce((s,i)=>s+i.qty*i.price,0)*(1+(q.taxPercent||0)/100);
+    const lead = DATA.leads.find(l=>l.id===q.leadId);
+    const num = lead?.whatsapp?.replace(/\D/g,'') || '';
+    const text = encodeURIComponent(`Namaste ${q.clientName}, aapki quotation ${q.number} ready hai. Total: ₹${total.toFixed(0)}. Details ke liye reply karein.`);
+    window.open(`https://wa.me/${num}?text=${text}`, '_blank');
+  });
+}
+
+function collectItems(){
+  const rows = document.querySelectorAll('[data-item-row]');
+  const items = [];
+  rows.forEach(r=>{
+    items.push({
+      desc: r.querySelector('.qi_desc').value,
+      qty: parseFloat(r.querySelector('.qi_qty').value)||0,
+      price: parseFloat(r.querySelector('.qi_price').value)||0
+    });
+  });
+  return items;
+}
+function val(id){ const el = document.getElementById(id); return el?el.value:''; }
+
+function renderTabOnly(){
+  // lightweight re-render of just the tab body to keep search input focused
+  const mainEls = document.querySelectorAll('.main');
+  if(mainEls.length){ /* fallback to full render for simplicity */ }
+  render();
+  const s = document.getElementById('leadSearchInput');
+  if(s){ s.focus(); s.setSelectionRange(s.value.length,s.value.length); }
+}
+
+// Overlay injection helpers for modals not part of main render tree
+function injectOverlay(html){
+  const wrap = document.createElement('div');
+  wrap.id = 'floatingOverlay';
+  wrap.innerHTML = html;
+  document.body.appendChild(wrap);
+  wireOverlay(wrap);
+}
+function removeOverlay(){ const w = document.getElementById('floatingOverlay'); if(w) w.remove(); }
+function wireOverlay(root){
+  root.querySelectorAll('[data-close-overlay]').forEach(el=>el.onclick=(e)=>{ if(e.target===el) removeOverlay(); });
+  root.querySelectorAll('[data-stop]').forEach(el=>el.onclick=(e)=>e.stopPropagation());
+  root.querySelectorAll('.close-x').forEach(el=>el.onclick=()=>removeOverlay());
+  root.querySelectorAll('[data-save-lead]').forEach(el=>el.onclick=()=>{
+    const id = el.dataset.saveLead;
+    const vals = {
+      name: rval(root,'f_name'), company: rval(root,'f_company'), contact: rval(root,'f_contact'), whatsapp: rval(root,'f_whatsapp'),
+      email: rval(root,'f_email'), source: rval(root,'f_source'), priority: rval(root,'f_priority'), assignedTo: rval(root,'f_assigned'),
+      status: rval(root,'f_status'), nextFollowupDate: rval(root,'f_followup'), address: rval(root,'f_address'), notes: rval(root,'f_notes'),
+      updatedAt: new Date().toISOString()
+    };
+    if(!vals.name || !vals.contact){ alert('Client Name aur Contact Number required hai'); return; }
+    if(id){ Object.assign(DATA.leads.find(l=>l.id===id), vals); }
+    else { DATA.leads.push({ id: uid('lead'), ...vals, meetings:[], calls:[], statusLog:[{date:todayISO(),status:vals.status}], lastContactDate:'' }); }
+    saveData(); removeOverlay(); render();
+  });
+  root.querySelectorAll('[data-save-call]').forEach(el=>el.onclick=()=>{
+    const lead = DATA.leads.find(l=>l.id===el.dataset.saveCall);
+    lead.calls = lead.calls||[];
+    lead.calls.push({date:todayISO(), outcome:rval(root,'cl_outcome'), notes:rval(root,'cl_notes')});
+    lead.lastContactDate = todayISO();
+    if(rval(root,'cl_followup')) lead.nextFollowupDate = rval(root,'cl_followup');
+    lead.updatedAt = new Date().toISOString();
+    saveData(); removeOverlay(); render();
+  });
+  root.querySelectorAll('[data-save-meeting]').forEach(el=>el.onclick=()=>{
+    const lead = DATA.leads.find(l=>l.id===el.dataset.saveMeeting);
+    lead.meetings = lead.meetings||[];
+    lead.meetings.push({date:rval(root,'ml_date'), type:rval(root,'ml_type'), outcome:rval(root,'ml_outcome'), notes:rval(root,'ml_notes')});
+    if(rval(root,'ml_followup')) lead.nextFollowupDate = rval(root,'ml_followup');
+    lead.updatedAt = new Date().toISOString();
+    saveData(); removeOverlay(); render();
+  });
+}
+function rval(root,id){ const el = root.querySelector('#'+id); return el?el.value:''; }
+
+// ---------- Boot ----------
+(async function(){
+  await loadData();
+  render();
+})();
+</script>
+</body>
+</html>
