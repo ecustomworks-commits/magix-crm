@@ -193,7 +193,7 @@ let DATA = { leads: [], tasks: [], quotations: [], team: ['Shubham','Telecaller'
 let SYNC_OK = true;
 
 async function loadData(){
-  if(!APPS_SCRIPT_URL || APPS_SCRIPT_URL.includes('https://script.google.com/macros/s/AKfycbz3BUx0t6c6fK4ESEL46QC1pO-JWeQOdP4f-gLtVXhSM2wTKqW_i0emFzTp0US-kyoZDQ/exec')){
+  if(!APPS_SCRIPT_URL || APPS_SCRIPT_URL.includes('PASTE_YOUR')){
     SYNC_OK = false;
     showSetupBanner();
     return;
@@ -212,7 +212,7 @@ async function loadData(){
 }
 let saveTimer=null;
 function saveData(){
-  if(!APPS_SCRIPT_URL || APPS_SCRIPT_URL.includes('https://script.google.com/macros/s/AKfycbz3BUx0t6c6fK4ESEL46QC1pO-JWeQOdP4f-gLtVXhSM2wTKqW_i0emFzTp0US-kyoZDQ/exec')) return;
+  if(!APPS_SCRIPT_URL || APPS_SCRIPT_URL.includes('PASTE_YOUR')) return;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async ()=>{
     try{
