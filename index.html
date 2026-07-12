@@ -52,6 +52,8 @@
   /* Dashboard cards */
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:22px;}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;}
+  .card.clickable-card{cursor:pointer;transition:.15s;}
+  .card.clickable-card:hover{border-color:var(--accent);box-shadow:0 2px 10px rgba(54,84,255,.10);transform:translateY(-1px);}
   .stat-num{font-size:26px;font-weight:700;}
   .stat-label{font-size:12.5px;color:var(--muted);margin-top:2px;}
   .panel-title{font-size:14px;font-weight:700;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;}
@@ -134,6 +136,49 @@
   .qtable{width:100%;border-collapse:collapse;margin-top:10px;}
   .qtable th,.qtable td{border:1px solid #ddd;padding:8px;font-size:13px;}
   .badge-count{background:var(--accent);color:#fff;font-size:10.5px;border-radius:10px;padding:1px 6px;margin-left:6px;}
+
+  /* Login screen */
+  .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--navy);padding:20px;}
+  .login-box{background:#fff;border-radius:16px;padding:32px 28px;width:100%;max-width:340px;text-align:center;}
+  .login-box .dot{width:14px;height:14px;border-radius:4px;background:var(--accent);display:inline-block;margin-bottom:10px;}
+  .login-box h2{font-size:19px;margin-bottom:4px;}
+  .login-box p{color:var(--muted);font-size:12.5px;margin-bottom:18px;}
+  .login-box input{width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:9px;font-size:14px;margin-bottom:10px;}
+  .login-box .btn{width:100%;justify-content:center;padding:11px;}
+  .login-err{color:var(--hot);font-size:12px;margin-bottom:8px;min-height:14px;}
+
+  /* Loading screen */
+  .loading-wrap{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg);gap:10px;}
+  .spinner{width:34px;height:34px;border-radius:50%;border:3px solid #dde1ee;border-top-color:var(--accent);animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .loading-wrap div.msg{color:var(--muted);font-size:13px;}
+  .sync-warn{position:fixed;bottom:14px;right:14px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;font-size:12px;padding:8px 12px;border-radius:9px;z-index:998;max-width:260px;}
+
+  /* Mobile responsive */
+  .hamburger{display:none;}
+  @media(max-width:880px){
+    .app{flex-direction:column;}
+    .hamburger{display:flex;align-items:center;justify-content:center;width:38px;height:38px;background:var(--navy);color:#fff;border-radius:8px;border:none;font-size:18px;position:fixed;top:12px;left:12px;z-index:60;}
+    .sidebar{position:fixed;top:0;left:0;bottom:0;z-index:59;transform:translateX(-100%);transition:transform .2s;width:230px;}
+    .sidebar.open{transform:translateX(0);}
+    .sidebar-overlay{display:none;}
+    .sidebar-overlay.show{display:block;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:58;}
+    .main{padding:64px 12px 80px;}
+    .topbar{flex-direction:column;align-items:flex-start;gap:10px;}
+    .topbar .btn{width:100%;justify-content:center;}
+    .grid{grid-template-columns:repeat(2,1fr);}
+    .two-col{grid-template-columns:1fr;}
+    table{display:block;overflow-x:auto;white-space:nowrap;}
+    .modal, .modal.wide{max-width:100%;padding:18px 16px;}
+    .form-grid{grid-template-columns:1fr;}
+    .toolbar input[type=text]{min-width:0;width:100%;}
+    .toolbar{flex-direction:column;align-items:stretch;}
+    .kanban{gap:10px;}
+    .kcol{min-width:78vw;max-width:78vw;}
+    .icon-btn{font-size:12px;padding:8px 10px;}
+    .lead-header{flex-direction:column;gap:8px;}
+  }
+
 </style>
 </head>
 <body>
@@ -142,9 +187,9 @@
 <script>
 // ---------- Storage helpers (Google Sheet backend via Apps Script Web App) ----------
 // PASTE your deployed Google Apps Script Web App URL below (see setup instructions).
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz3BUx0t6c6fK4ESEL46QC1pO-JWeQOdP4f-gLtVXhSM2wTKqW_i0emFzTp0US-kyoZDQ/exec';
+const APPS_SCRIPT_URL = 'PASTE_YOUR_WEB_APP_URL_HERE';
 
-let DATA = { leads: [], tasks: [], quotations: [], team: ['Shubham','Telecaller','Digital Marketing Exec'], nextId: 1 };
+let DATA = { leads: [], tasks: [], quotations: [], team: ['Shubham','Telecaller','Digital Marketing Exec'], leadSources: ['Reference','Walk-in','Instagram','Website','Cold Call','Other'], nextId: 1 };
 let SYNC_OK = true;
 
 async function loadData(){
@@ -159,6 +204,7 @@ async function loadData(){
     if(text && text.trim()){ DATA = JSON.parse(text); }
   }catch(e){ console.error('load failed', e); SYNC_OK = false; }
   if(!DATA.team) DATA.team = ['Shubham','Telecaller','Digital Marketing Exec'];
+  if(!DATA.leadSources || !DATA.leadSources.length) DATA.leadSources = ['Reference','Walk-in','Instagram','Website','Cold Call','Other'];
   if(!DATA.leads) DATA.leads = [];
   if(!DATA.tasks) DATA.tasks = [];
   if(!DATA.quotations) DATA.quotations = [];
@@ -188,7 +234,6 @@ function uid(prefix){ return prefix + '_' + (DATA.nextId++) + '_' + Math.random(
 
 // ---------- Constants ----------
 const STAGES = ['New Lead','Contacted','Meeting Scheduled','Proposal Sent','Negotiation','Closed Won','Closed Lost'];
-const LEAD_SOURCES = ['Reference','Walk-in','Instagram','Website','Meesho','Cold Call','Other'];
 
 function todayISO(){ return new Date().toISOString().slice(0,10); }
 function fmtDate(d){ if(!d) return '—'; const dt = new Date(d+'T00:00:00'); return dt.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); }
@@ -202,6 +247,8 @@ function render(){ document.getElementById('root').innerHTML = App(); attachEven
 // ---------- Root App ----------
 function App(){
   return `
+  <button class="hamburger" id="hamburgerBtn">☰</button>
+  <div class="sidebar-overlay"></div>
   <div class="app">
     ${Sidebar()}
     <div class="main">
@@ -260,18 +307,34 @@ function renderTab(){
 
 // ---------- Team ----------
 function TeamView(){
-  return `<div class="card" style="max-width:480px;">
-    <div class="panel-title">Team Members</div>
-    ${DATA.team.map((m,idx)=>{
-      const leadCount = DATA.leads.filter(l=>l.assignedTo===m).length;
-      return `<div class="list-row">
-        <span>${m} <span style="color:var(--muted);font-size:11.5px;">(${leadCount} leads)</span></span>
-        <button class="btn danger small" data-remove-member="${idx}">Remove</button>
-      </div>`;
-    }).join('') || `<div class="empty">No team members yet.</div>`}
-    <div style="display:flex;gap:8px;margin-top:14px;">
-      <input type="text" id="newMemberInput" placeholder="New member name" style="flex:1;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;">
-      <button class="btn small" data-add-member="1">+ Add</button>
+  return `<div class="two-col">
+    <div class="card">
+      <div class="panel-title">Team Members</div>
+      ${DATA.team.map((m,idx)=>{
+        const leadCount = DATA.leads.filter(l=>l.assignedTo===m).length;
+        return `<div class="list-row">
+          <span>${m} <span style="color:var(--muted);font-size:11.5px;">(${leadCount} leads)</span></span>
+          <button class="btn danger small" data-remove-member="${idx}">Remove</button>
+        </div>`;
+      }).join('') || `<div class="empty">No team members yet.</div>`}
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <input type="text" id="newMemberInput" placeholder="New member name" style="flex:1;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;">
+        <button class="btn small" data-add-member="1">+ Add</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="panel-title">Lead Sources <span style="font-weight:400;color:var(--muted);font-size:11px;">(jaha se leads aate hain)</span></div>
+      ${DATA.leadSources.map((s,idx)=>{
+        const leadCount = DATA.leads.filter(l=>l.source===s).length;
+        return `<div class="list-row">
+          <span>${s} <span style="color:var(--muted);font-size:11.5px;">(${leadCount} leads)</span></span>
+          <button class="btn danger small" data-remove-source="${idx}">Remove</button>
+        </div>`;
+      }).join('') || `<div class="empty">No lead sources yet.</div>`}
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <input type="text" id="newSourceInput" placeholder="New source (e.g. YouTube)" style="flex:1;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;">
+        <button class="btn small" data-add-source="1">+ Add</button>
+      </div>
     </div>
   </div>`;
 }
@@ -308,35 +371,81 @@ function Dashboard(){
   return `
   ${alerts}
   <div class="grid">
-    <div class="card"><div class="stat-num">${totalLeads}</div><div class="stat-label">Total Leads</div></div>
-    <div class="card"><div class="stat-num">${todaysCalls}</div><div class="stat-label">Today's Calls</div></div>
-    <div class="card"><div class="stat-num">${todaysMeetings}</div><div class="stat-label">Today's Meetings</div></div>
-    <div class="card"><div class="stat-num">${todaysFollowups}</div><div class="stat-label">Today's Follow-ups</div></div>
-    <div class="card"><div class="stat-num" style="color:${overdue.length?'var(--hot)':'inherit'}">${overdue.length}</div><div class="stat-label">Overdue Follow-ups</div></div>
-    <div class="card"><div class="stat-num">${pendingQuotes}</div><div class="stat-label">Pending Quotations</div></div>
-    <div class="card"><div class="stat-num" style="color:var(--win)">${won}</div><div class="stat-label">Closed Won</div></div>
-    <div class="card"><div class="stat-num" style="color:var(--muted)">${lost}</div><div class="stat-label">Closed Lost</div></div>
+    <div class="card clickable-card" data-nav="leads"><div class="stat-num">${totalLeads}</div><div class="stat-label">Total Leads</div></div>
+    <div class="card clickable-card" data-nav="leads"><div class="stat-num">${todaysCalls}</div><div class="stat-label">Today's Calls</div></div>
+    <div class="card clickable-card" data-nav="calendar"><div class="stat-num">${todaysMeetings}</div><div class="stat-label">Today's Meetings</div></div>
+    <div class="card clickable-card" data-nav="calendar"><div class="stat-num">${todaysFollowups}</div><div class="stat-label">Today's Follow-ups</div></div>
+    <div class="card clickable-card" data-nav="leads"><div class="stat-num" style="color:${overdue.length?'var(--hot)':'inherit'}">${overdue.length}</div><div class="stat-label">Overdue Follow-ups</div></div>
+    <div class="card clickable-card" data-nav="quotations"><div class="stat-num">${pendingQuotes}</div><div class="stat-label">Pending Quotations</div></div>
+    <div class="card clickable-card" data-nav="leads"><div class="stat-num" style="color:var(--win)">${won}</div><div class="stat-label">Closed Won</div></div>
+    <div class="card clickable-card" data-nav="leads"><div class="stat-num" style="color:var(--muted)">${lost}</div><div class="stat-label">Closed Lost</div></div>
   </div>
   <div class="two-col">
     <div class="card">
-      <div class="panel-title">Lead Pipeline</div>
+      <div class="panel-title">Lead Pipeline <span style="font-weight:400;color:var(--muted);font-size:11px;">(click a stage to filter)</span></div>
       ${STAGES.map(s=>{
         const c = leads.filter(l=>l.status===s).length;
         const max = Math.max(1,...STAGES.map(st=>leads.filter(l=>l.status===st).length));
         const w = Math.round((c/max)*100);
-        return `<div style="margin-bottom:8px;"><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px;"><span>${s}</span><span>${c}</span></div><div style="background:#eef0f7;border-radius:6px;height:8px;"><div style="width:${w}%;background:var(--accent);height:8px;border-radius:6px;"></div></div></div>`;
+        return `<div style="margin-bottom:8px;cursor:pointer;" data-pipeline-stage="${s}"><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px;"><span>${s}</span><span>${c}</span></div><div style="background:#eef0f7;border-radius:6px;height:8px;"><div style="width:${w}%;background:var(--accent);height:8px;border-radius:6px;transition:width .3s;"></div></div></div>`;
       }).join('')}
     </div>
+    <div class="card">
+      <div class="panel-title">Priority Breakdown</div>
+      ${PriorityDonut(leads)}
+    </div>
+  </div>
+  <div class="two-col" style="margin-top:16px;">
     <div class="card">
       <div class="panel-title">Team Performance</div>
       ${teamPerf.map(t=>`<div class="list-row"><span>${t.m}</span><span>${t.total} leads · <b style="color:var(--win)">${t.won} won</b></span></div>`).join('') || `<div class="empty">No team data yet</div>`}
     </div>
+    <div class="card">
+      <div class="panel-title">Leads by Source</div>
+      ${SourceBarChart(leads)}
+    </div>
   </div>
   <div class="card" style="margin-top:16px;">
     <div class="panel-title">Recent Activity</div>
-    ${recent.length? recent.map(l=>`<div class="list-row"><span>${l.name} — <span style="color:var(--muted)">${l.company||'—'}</span></span><span class="pill ${pillClass(l)}">${l.status}</span></div>`).join('') : `<div class="empty">No leads yet. Click "+ New Lead" to add your first lead.</div>`}
+    ${recent.length? recent.map(l=>`<div class="list-row" data-open-lead="${l.id}" style="cursor:pointer;"><span>${l.name} — <span style="color:var(--muted)">${l.company||'—'}</span></span><span class="pill ${pillClass(l)}">${l.status}</span></div>`).join('') : `<div class="empty">No leads yet. Click "+ New Lead" to add your first lead.</div>`}
   </div>
   `;
+}
+
+function PriorityDonut(leads){
+  const counts = {Hot:0, Warm:0, Cold:0};
+  leads.forEach(l=>{ if(counts[l.priority]!==undefined) counts[l.priority]++; });
+  const total = counts.Hot+counts.Warm+counts.Cold;
+  if(!total) return `<div class="empty">No leads yet</div>`;
+  const colors = {Hot:'#ef4444', Warm:'#f59e0b', Cold:'#3b82f6'};
+  const order = ['Hot','Warm','Cold'];
+  let cumPct = 0;
+  const R = 40, C = 2*Math.PI*R;
+  const segs = order.map(k=>{
+    const pct = counts[k]/total;
+    const dash = pct*C;
+    const seg = `<circle cx="60" cy="60" r="${R}" fill="none" stroke="${colors[k]}" stroke-width="16" stroke-dasharray="${dash} ${C-dash}" stroke-dashoffset="${-cumPct*C}" transform="rotate(-90 60 60)"/>`;
+    cumPct += pct;
+    return seg;
+  }).join('');
+  return `<div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+    <svg width="120" height="120" viewBox="0 0 120 120">${segs}<text x="60" y="64" text-anchor="middle" font-size="18" font-weight="700" fill="var(--ink)">${total}</text></svg>
+    <div>
+      ${order.map(k=>`<div style="display:flex;align-items:center;gap:7px;margin-bottom:6px;font-size:12.5px;"><span style="width:10px;height:10px;border-radius:3px;background:${colors[k]};display:inline-block;"></span>${k} — <b>${counts[k]}</b></div>`).join('')}
+    </div>
+  </div>`;
+}
+
+function SourceBarChart(leads){
+  const counts = {};
+  leads.forEach(l=>{ const s = l.source||'Not Set'; counts[s] = (counts[s]||0)+1; });
+  const entries = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+  if(!entries.length) return `<div class="empty">No leads yet</div>`;
+  const max = Math.max(...entries.map(e=>e[1]));
+  return entries.map(([src,cnt])=>{
+    const w = Math.round((cnt/max)*100);
+    return `<div style="margin-bottom:9px;"><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px;"><span>${src}</span><span>${cnt}</span></div><div style="background:#eef0f7;border-radius:6px;height:8px;"><div style="width:${w}%;background:var(--cold);height:8px;border-radius:6px;"></div></div></div>`;
+  }).join('');
 }
 
 function pillClass(l){
@@ -355,11 +464,14 @@ function Kanban(){
       return `<div class="kcol" data-stage-col="${stage}">
         <div class="kcol-head"><span>${stage}</span><span>${items.length}</span></div>
         ${items.map(l=>`
-          <div class="kcard" draggable="true" data-lead-id="${l.id}">
+          <div class="kcard" draggable="true" data-lead-id="${l.id}" data-open-lead="${l.id}">
             <div class="name">${l.name}</div>
             <div class="meta">${l.company||'—'}</div>
             <div class="meta" style="margin-top:5px;"><span class="pill ${l.priority?.toLowerCase()||'cold'}">${l.priority||'—'}</span></div>
             ${l.nextFollowupDate? `<div class="meta" style="margin-top:5px;">Next: ${fmtDate(l.nextFollowupDate)}</div>`:''}
+            <select class="kcard-stage-move" data-move-lead="${l.id}" onclick="event.stopPropagation()" style="margin-top:7px;width:100%;padding:5px 6px;font-size:11px;border:1px solid var(--line);border-radius:6px;background:#fbfbfd;">
+              ${STAGES.map(s=>`<option value="${s}" ${l.status===s?'selected':''}>${s}</option>`).join('')}
+            </select>
           </div>`).join('') || `<div class="empty" style="padding:14px 4px;">Drop leads here</div>`}
       </div>`;
     }).join('')}
@@ -498,7 +610,7 @@ function TasksView(){
         <td>${t.assignedTo||'—'}</td>
         <td><span class="pill ${t.priority==='High'?'hot':t.priority==='Medium'?'warm':'cold'}">${t.priority}</span></td>
         <td style="color:${overdue?'var(--hot)':'inherit'}">${fmtDate(t.dueDate)}</td>
-        <td><button class="btn ghost small" data-edit-task="${t.id}">Edit</button></td>
+        <td><button class="btn ghost small" data-edit-task="${t.id}">Edit</button> <button class="btn danger small" data-delete-task="${t.id}">Delete</button></td>
       </tr>`;
     }).join('') || `<tr><td colspan="7"><div class="empty">No tasks yet. Click "+ New Task" to create one.</div></td></tr>`}
     </tbody>
@@ -524,6 +636,7 @@ function QuotationsView(){
         <td>
           <button class="btn ghost small" data-print-quote="${q.id}">🖨 PDF</button>
           <button class="btn ghost small" data-wa-quote="${q.id}">WhatsApp</button>
+          <button class="btn danger small" data-delete-quote="${q.id}">Delete</button>
         </td>
       </tr>`;
     }).join('') || `<tr><td colspan="6"><div class="empty">No quotations yet. Click "+ New Quotation" to create one.</div></td></tr>`}
@@ -557,10 +670,18 @@ function LeadModal(id){
       <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
         <a class="icon-btn call" href="${telHref}">📞 Call ${l.contact||''}</a>
         ${l.whatsapp?`<a class="icon-btn wa" href="${waHref}" target="_blank">💬 WhatsApp</a>`:''}
+        ${l.whatsapp?`<select class="icon-btn" data-wa-template="${l.id}" style="cursor:pointer;">
+          <option value="">📋 Quick Message...</option>
+          <option value="followup">Follow-up</option>
+          <option value="meeting">Confirm Meeting</option>
+          <option value="quote">Quotation Ready</option>
+          <option value="thanks">Thank You</option>
+        </select>`:''}
         <button class="icon-btn" data-log-call="${l.id}">📝 Log Call</button>
         <button class="icon-btn" data-log-meeting="${l.id}">🤝 Log Meeting</button>
         <button class="icon-btn" data-open-new-quote-for="${l.id}">🧾 Create Quotation</button>
         <button class="icon-btn" data-edit-lead="${l.id}">✏️ Edit Lead</button>
+        <button class="icon-btn danger" data-delete-lead="${l.id}" style="color:var(--hot);border-color:#fbd5d5;">🗑️ Delete</button>
       </div>
       <div class="tabs">
         <div class="tab ${tab==='overview'?'active':''}" data-lead-tab="overview">Overview</div>
@@ -608,7 +729,7 @@ function LeadFormModal(lead){
         <div class="field"><label>Contact Number*</label><input id="f_contact" value="${l.contact}"></div>
         <div class="field"><label>WhatsApp Number</label><input id="f_whatsapp" value="${l.whatsapp}"></div>
         <div class="field"><label>Email</label><input id="f_email" value="${l.email}"></div>
-        <div class="field"><label>Lead Source</label><select id="f_source">${['',...LEAD_SOURCES].map(s=>`<option ${l.source===s?'selected':''}>${s}</option>`).join('')}</select></div>
+        <div class="field"><label>Lead Source</label><select id="f_source">${['',...DATA.leadSources].map(s=>`<option ${l.source===s?'selected':''}>${s}</option>`).join('')}</select></div>
         <div class="field"><label>Priority</label><select id="f_priority">${['Hot','Warm','Cold'].map(s=>`<option ${l.priority===s?'selected':''}>${s}</option>`).join('')}</select></div>
         <div class="field"><label>Assigned To</label><select id="f_assigned">${DATA.team.map(s=>`<option ${l.assignedTo===s?'selected':''}>${s}</option>`).join('')}</select></div>
         <div class="field"><label>Stage</label><select id="f_status">${STAGES.map(s=>`<option ${l.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
@@ -917,6 +1038,79 @@ function attachEvents(){
     if(!confirm(`${name} ko team se remove karein?`)) return;
     DATA.team.splice(idx,1); saveData(); render();
   });
+  document.querySelectorAll('[data-add-source]').forEach(el=>el.onclick=()=>{
+    const inp = document.getElementById('newSourceInput');
+    const name = inp.value.trim();
+    if(!name) return;
+    if(DATA.leadSources.includes(name)){ alert('Ye source already added hai'); return; }
+    DATA.leadSources.push(name); saveData(); render();
+  });
+  document.querySelectorAll('[data-remove-source]').forEach(el=>el.onclick=()=>{
+    const idx = parseInt(el.dataset.removeSource);
+    const name = DATA.leadSources[idx];
+    if(!confirm(`"${name}" source ko remove karein?`)) return;
+    DATA.leadSources.splice(idx,1); saveData(); render();
+  });
+
+  document.querySelectorAll('[data-wa-template]').forEach(el=>el.onchange=()=>{
+    const lead = DATA.leads.find(l=>l.id===el.dataset.waTemplate);
+    const val = el.value;
+    if(!val || !lead) { el.value=''; return; }
+    const templates = {
+      followup: `Namaste ${lead.name}, main Magix Animation Institute se baat kar raha hu. Aapse follow-up karna tha — kya aapne humari services ke baare me soch liya? Koi bhi sawaal ho tho bataiye, khushi se help karenge.`,
+      meeting: `Namaste ${lead.name}, aapki meeting confirm ho gayi hai. Time aur venue ki details jald hi bhej denge. Dhanyawad!`,
+      quote: `Namaste ${lead.name}, aapki quotation ready hai. Main abhi share karta hu — kripya check karke bataiye.`,
+      thanks: `Namaste ${lead.name}, Magix Animation Institute choose karne ke liye dhanyawad! Koi bhi query ho tho hume bataiye, hum hamesha madad ke liye ready hain.`
+    };
+    const num = lead.whatsapp.replace(/\D/g,'');
+    window.open(`https://wa.me/${num}?text=${encodeURIComponent(templates[val])}`, '_blank');
+    el.value = '';
+  });
+
+  document.querySelectorAll('[data-pipeline-stage]').forEach(el=>el.onclick=()=>{
+    state.leadFilterStage = el.dataset.pipelineStage; state.tab='leads'; render();
+  });
+
+  document.querySelectorAll('[data-move-lead]').forEach(el=>el.onchange=(e)=>{
+    e.stopPropagation();
+    const lead = DATA.leads.find(l=>l.id===el.dataset.moveLead);
+    const newStage = el.value;
+    if(lead.status!==newStage){
+      lead.status = newStage;
+      lead.statusLog = lead.statusLog||[];
+      lead.statusLog.push({date:todayISO(), status:newStage});
+      lead.updatedAt = new Date().toISOString();
+      saveData();
+    }
+    render();
+  });
+
+  // Mobile hamburger
+  const hamb = document.getElementById('hamburgerBtn');
+  if(hamb){ hamb.onclick = ()=>{ document.querySelector('.sidebar').classList.add('open'); document.querySelector('.sidebar-overlay').classList.add('show'); }; }
+  const overlay = document.querySelector('.sidebar-overlay');
+  if(overlay){ overlay.onclick = ()=>{ document.querySelector('.sidebar').classList.remove('open'); overlay.classList.remove('show'); }; }
+  document.querySelectorAll('.nav-item').forEach(el=>{
+    const existing = el.onclick;
+    el.onclick = (e)=>{ if(existing) existing(e); const sb=document.querySelector('.sidebar'); const ov=document.querySelector('.sidebar-overlay'); if(sb) sb.classList.remove('open'); if(ov) ov.classList.remove('show'); };
+  });
+
+  // Delete lead / task / quotation
+  document.querySelectorAll('[data-delete-lead]').forEach(el=>el.onclick=()=>{
+    if(!confirm('Ye lead permanently delete ho jayega. Pakka?')) return;
+    DATA.leads = DATA.leads.filter(l=>l.id!==el.dataset.deleteLead);
+    saveData(); state.openLeadId=null; render();
+  });
+  document.querySelectorAll('[data-delete-task]').forEach(el=>el.onclick=()=>{
+    if(!confirm('Ye task delete ho jayega. Pakka?')) return;
+    DATA.tasks = DATA.tasks.filter(t=>t.id!==el.dataset.deleteTask);
+    saveData(); render();
+  });
+  document.querySelectorAll('[data-delete-quote]').forEach(el=>el.onclick=()=>{
+    if(!confirm('Ye quotation delete ho jayega. Pakka?')) return;
+    DATA.quotations = DATA.quotations.filter(q=>q.id!==el.dataset.deleteQuote);
+    saveData(); render();
+  });
 
   document.querySelectorAll('[data-wa-quote]').forEach(el=>el.onclick=()=>{
     const q = DATA.quotations.find(x=>x.id===el.dataset.waQuote);
@@ -997,10 +1191,57 @@ function wireOverlay(root){
 }
 function rval(root,id){ const el = root.querySelector('#'+id); return el?el.value:''; }
 
+// ---------- Login gate (basic protection — not enterprise security) ----------
+// Password change karne ke liye yahan naya password likh do.
+const CRM_PASSWORD = 'magix2026';
+
+function showLogin(){
+  document.getElementById('root').innerHTML = `
+    <div class="login-wrap">
+      <div class="login-box">
+        <span class="dot"></span>
+        <h2>Magix Sales CRM</h2>
+        <p>Team password daalke enter karein</p>
+        <div class="login-err" id="loginErr"></div>
+        <input type="password" id="loginPass" placeholder="Password" autofocus>
+        <button class="btn" id="loginBtn">Login</button>
+      </div>
+    </div>`;
+  document.getElementById('loginBtn').onclick = tryLogin;
+  document.getElementById('loginPass').addEventListener('keydown', e=>{ if(e.key==='Enter') tryLogin(); });
+}
+function tryLogin(){
+  const val = document.getElementById('loginPass').value;
+  if(val === CRM_PASSWORD){
+    sessionStorage.setItem('magix_crm_auth','1');
+    boot();
+  } else {
+    document.getElementById('loginErr').textContent = 'Galat password. Dobara try karein.';
+  }
+}
+function showLoading(){
+  document.getElementById('root').innerHTML = `
+    <div class="loading-wrap">
+      <div class="spinner"></div>
+      <div class="msg">CRM load ho raha hai…</div>
+    </div>`;
+}
+
 // ---------- Boot ----------
-(async function(){
+async function boot(){
+  showLoading();
   await loadData();
   render();
+  if(!SYNC_OK){
+    const warn = document.createElement('div');
+    warn.className = 'sync-warn';
+    warn.textContent = '⚠️ Google Sheet se connect nahi ho paaya. Data save nahi hoga — internet check karein ya setup guide dekhein.';
+    document.body.appendChild(warn);
+  }
+}
+(function(){
+  if(sessionStorage.getItem('magix_crm_auth')==='1'){ boot(); }
+  else { showLogin(); }
 })();
 </script>
 </body>
