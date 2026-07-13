@@ -76,9 +76,8 @@
   .kanban{display:flex;gap:12px;overflow-x:auto;padding-bottom:10px;}
   .kcol{background:#eceef5;border-radius:12px;min-width:250px;max-width:250px;padding:10px;flex-shrink:0;}
   .kcol-head{font-size:12.5px;font-weight:700;color:#4b5063;display:flex;justify-content:space-between;margin-bottom:8px;padding:0 3px;}
-  .kcard{background:#fff;border-radius:10px;padding:10px 12px;margin-bottom:8px;box-shadow:0 1px 2px rgba(20,20,40,.06);cursor:grab;border:1px solid var(--line);}
-  .kcard:active{cursor:grabbing;}
-  .kcard.dragging{opacity:.4;}
+  .kcard{background:#fff;border-radius:10px;padding:10px 12px;margin-bottom:8px;box-shadow:0 1px 2px rgba(20,20,40,.06);cursor:pointer;border:1px solid var(--line);}
+  .kcard:hover{border-color:var(--accent);}
   .kcard .name{font-weight:600;font-size:13.5px;margin-bottom:3px;}
   .kcard .meta{font-size:11.5px;color:var(--muted);}
   .kcol.dragover{outline:2px dashed var(--accent);outline-offset:-4px;}
@@ -464,15 +463,12 @@ function Kanban(){
       return `<div class="kcol" data-stage-col="${stage}">
         <div class="kcol-head"><span>${stage}</span><span>${items.length}</span></div>
         ${items.map(l=>`
-          <div class="kcard" draggable="true" data-lead-id="${l.id}" data-open-lead="${l.id}">
+          <div class="kcard" data-open-lead="${l.id}">
             <div class="name">${l.name}</div>
             <div class="meta">${l.company||'—'}</div>
             <div class="meta" style="margin-top:5px;"><span class="pill ${l.priority?.toLowerCase()||'cold'}">${l.priority||'—'}</span></div>
             ${l.nextFollowupDate? `<div class="meta" style="margin-top:5px;">Next: ${fmtDate(l.nextFollowupDate)}</div>`:''}
-            <select class="kcard-stage-move" data-move-lead="${l.id}" onclick="event.stopPropagation()" style="margin-top:7px;width:100%;padding:5px 6px;font-size:11px;border:1px solid var(--line);border-radius:6px;background:#fbfbfd;">
-              ${STAGES.map(s=>`<option value="${s}" ${l.status===s?'selected':''}>${s}</option>`).join('')}
-            </select>
-          </div>`).join('') || `<div class="empty" style="padding:14px 4px;">Drop leads here</div>`}
+          </div>`).join('') || `<div class="empty" style="padding:14px 4px;">Koi lead nahi hai</div>`}
       </div>`;
     }).join('')}
   </div>`;
@@ -943,32 +939,6 @@ function attachEvents(){
     saveData(); render();
   });
 
-  // Kanban drag and drop
-  document.querySelectorAll('.kcard').forEach(card=>{
-    card.addEventListener('dragstart', ()=>{ card.classList.add('dragging'); card._id = card.dataset.leadId; });
-    card.addEventListener('dragend', ()=>{ card.classList.remove('dragging'); });
-  });
-  document.querySelectorAll('.kcol').forEach(col=>{
-    col.addEventListener('dragover', (e)=>{ e.preventDefault(); col.classList.add('dragover'); });
-    col.addEventListener('dragleave', ()=>col.classList.remove('dragover'));
-    col.addEventListener('drop', (e)=>{
-      e.preventDefault(); col.classList.remove('dragover');
-      const dragging = document.querySelector('.kcard.dragging');
-      if(!dragging) return;
-      const leadId = dragging.dataset.leadId;
-      const lead = DATA.leads.find(l=>l.id===leadId);
-      const newStage = col.dataset.stageCol;
-      if(lead.status!==newStage){
-        lead.status = newStage;
-        lead.statusLog = lead.statusLog||[];
-        lead.statusLog.push({date:todayISO(), status:newStage});
-        lead.updatedAt = new Date().toISOString();
-        saveData();
-      }
-      render();
-    });
-  });
-
   // Tasks
   document.querySelectorAll('[data-open-new-task]').forEach(el=>el.onclick=()=>{ state.editingTask=null; state.openTaskModal=true; render(); });
   document.querySelectorAll('[data-edit-task]').forEach(el=>el.onclick=()=>{ state.editingTask = DATA.tasks.find(t=>t.id===el.dataset.editTask); state.openTaskModal=true; render(); });
@@ -1069,20 +1039,6 @@ function attachEvents(){
 
   document.querySelectorAll('[data-pipeline-stage]').forEach(el=>el.onclick=()=>{
     state.leadFilterStage = el.dataset.pipelineStage; state.tab='leads'; render();
-  });
-
-  document.querySelectorAll('[data-move-lead]').forEach(el=>el.onchange=(e)=>{
-    e.stopPropagation();
-    const lead = DATA.leads.find(l=>l.id===el.dataset.moveLead);
-    const newStage = el.value;
-    if(lead.status!==newStage){
-      lead.status = newStage;
-      lead.statusLog = lead.statusLog||[];
-      lead.statusLog.push({date:todayISO(), status:newStage});
-      lead.updatedAt = new Date().toISOString();
-      saveData();
-    }
-    render();
   });
 
   // Mobile hamburger
