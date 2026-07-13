@@ -241,7 +241,29 @@ function daysDiff(d){ const t=new Date(todayISO()); const dd=new Date(d); return
 // ---------- App State ----------
 let state = { tab:'dashboard', leadSearch:'', leadFilterStage:'', openLeadId:null, openTaskModal:false, editingTask:null, openQuoteModal:false, editingQuote:null, quoteForLead:null, printQuote:null, newLeadOpen:false, taskFilter:'mine' };
 
-function render(){ document.getElementById('root').innerHTML = App(); attachEvents(); }
+function render(){
+  try{
+    document.getElementById('root').innerHTML = App();
+    attachEvents();
+  }catch(err){
+    console.error('Render error:', err);
+    showErrorBanner('Render error: ' + err.message);
+  }
+}
+function showErrorBanner(msg){
+  const old = document.getElementById('errBanner');
+  if(old) old.remove();
+  const b = document.createElement('div');
+  b.id = 'errBanner';
+  b.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#7f1d1d;color:#fff;padding:10px 16px;font-size:12.5px;text-align:center;z-index:9999;';
+  b.innerHTML = '⚠️ Ek error aayi hai — is message ka screenshot lekar Claude ko bhejein: <b>' + msg + '</b> <button onclick="this.parentElement.remove()" style="margin-left:10px;background:#fff;color:#7f1d1d;border:none;border-radius:5px;padding:2px 8px;cursor:pointer;">Close</button>';
+  document.body.prepend(b);
+}
+window.onerror = function(msg, url, line, col, error){
+  console.error('Global error:', msg, 'at line', line);
+  showErrorBanner(msg + ' (line ' + line + ')');
+  return false;
+};
 
 // ---------- Root App ----------
 function App(){
@@ -597,7 +619,7 @@ function TasksView(){
     <thead><tr><th></th><th>Task</th><th>Related Lead</th><th>Assigned To</th><th>Priority</th><th>Due Date</th><th></th></tr></thead>
     <tbody>
     ${(state.taskFilter==='all'?tasks:tasks.filter(t=>t.assignedTo===state.taskFilter)).map(t=>{
-      const lead = DATA.leads.find(l=>l.id===t.leadId);
+      const lead = DATA.leads.find(l=>String(l.id)===String(t.leadId));
       const overdue = !t.completed && t.dueDate && t.dueDate<todayISO();
       return `<tr>
         <td><input type="checkbox" data-toggle-task="${t.id}" ${t.completed?'checked':''}></td>
@@ -642,7 +664,7 @@ function QuotationsView(){
 
 // ---------- Lead Modal ----------
 function LeadModal(id){
-  const l = DATA.leads.find(x=>x.id===id);
+  const l = DATA.leads.find(x=>String(x.id)===String(id));
   if(!l) return '';
   const tab = l._modalTab || 'overview';
   const telHref = l.contact ? `tel:${l.contact.replace(/\s+/g,'')}` : '#';
@@ -799,7 +821,7 @@ function TaskModal(){
 // ---------- Quote Modal ----------
 function QuoteModal(){
   const q = state.editingQuote || {number:'MAG-'+String(DATA.quotations.length+1).padStart(3,'0'), leadId: state.quoteForLead||'', clientName:'', date:todayISO(), taxPercent:0, items:[{desc:'',qty:1,price:0}], notes:''};
-  if(q.leadId && !q.clientName){ const ld = DATA.leads.find(l=>l.id===q.leadId); if(ld) q.clientName = ld.name; }
+  if(q.leadId && !q.clientName){ const ld = DATA.leads.find(l=>String(l.id)===String(q.leadId)); if(ld) q.clientName = ld.name; }
   return `<div class="overlay" data-close-overlay="quote">
     <div class="modal wide" data-stop>
       <div class="modal-head"><h2>${state.editingQuote?'Edit Quotation':'New Quotation'}</h2><button class="close-x" data-close-overlay="quote">✕</button></div>
@@ -831,7 +853,7 @@ function QuoteModal(){
 }
 
 function PrintArea(qid){
-  const q = DATA.quotations.find(x=>x.id===qid);
+  const q = DATA.quotations.find(x=>String(x.id)===String(qid));
   if(!q) return '';
   const subtotal = q.items.reduce((s,i)=>s+i.qty*i.price,0);
   const tax = subtotal * (q.taxPercent||0)/100;
@@ -859,7 +881,7 @@ function PrintArea(qid){
 // ---------- Event wiring ----------
 function attachEvents(){
   document.querySelectorAll('[data-nav]').forEach(el=>el.onclick=()=>{ state.tab = el.dataset.nav; render(); });
-  document.querySelectorAll('[data-open-lead]').forEach(el=>el.onclick=(e)=>{ e.preventDefault(); state.openLeadId = el.dataset.openLead; render(); });
+  document.querySelectorAll('[data-open-lead]').forEach(el=>el.onclick=(e)=>{ e.preventDefault(); state.openLeadId = String(el.dataset.openLead); render(); });
   document.querySelectorAll('[data-close-overlay]').forEach(el=>el.onclick=(e)=>{
     if(e.target!==el) return;
     const type = el.dataset.closeOverlay;
@@ -882,7 +904,7 @@ function attachEvents(){
 
   document.querySelectorAll('[data-open-new-lead]').forEach(el=>el.onclick=()=>{ state.editingLead=null; injectOverlay(LeadFormModal(null)); });
   document.querySelectorAll('[data-edit-lead]').forEach(el=>el.onclick=()=>{
-    const lead = DATA.leads.find(l=>l.id===el.dataset.editLead);
+    const lead = DATA.leads.find(l=>String(l.id)===String(el.dataset.editLead));
     injectOverlay(LeadFormModal(lead));
   });
   document.querySelectorAll('[data-save-lead]').forEach(el=>el.onclick=()=>{
@@ -895,7 +917,7 @@ function attachEvents(){
     };
     if(!vals.name || !vals.contact){ alert('Client Name aur Contact Number required hai'); return; }
     if(id){
-      const lead = DATA.leads.find(l=>l.id===id);
+      const lead = DATA.leads.find(l=>String(l.id)===String(id));
       Object.assign(lead, vals);
     } else {
       DATA.leads.push({ id: uid('lead'), ...vals, meetings:[], calls:[], statusLog:[{date:todayISO(),status:vals.status}], lastContactDate:'' });
@@ -905,7 +927,7 @@ function attachEvents(){
 
   document.querySelectorAll('[data-log-call]').forEach(el=>el.onclick=()=>injectOverlay(CallLogModal(el.dataset.logCall)));
   document.querySelectorAll('[data-save-call]').forEach(el=>el.onclick=()=>{
-    const lead = DATA.leads.find(l=>l.id===el.dataset.saveCall);
+    const lead = DATA.leads.find(l=>String(l.id)===String(el.dataset.saveCall));
     lead.calls = lead.calls||[];
     lead.calls.push({date:todayISO(), outcome:val('cl_outcome'), notes:val('cl_notes')});
     lead.lastContactDate = todayISO();
@@ -916,7 +938,7 @@ function attachEvents(){
 
   document.querySelectorAll('[data-log-meeting]').forEach(el=>el.onclick=()=>injectOverlay(MeetingLogModal(el.dataset.logMeeting)));
   document.querySelectorAll('[data-save-meeting]').forEach(el=>el.onclick=()=>{
-    const lead = DATA.leads.find(l=>l.id===el.dataset.saveMeeting);
+    const lead = DATA.leads.find(l=>String(l.id)===String(el.dataset.saveMeeting));
     lead.meetings = lead.meetings||[];
     lead.meetings.push({date:val('ml_date'), type:val('ml_type'), outcome:val('ml_outcome'), notes:val('ml_notes')});
     if(val('ml_followup')) lead.nextFollowupDate = val('ml_followup');
@@ -925,12 +947,12 @@ function attachEvents(){
   });
 
   document.querySelectorAll('[data-lead-tab]').forEach(el=>el.onclick=()=>{
-    const lead = DATA.leads.find(l=>l.id===state.openLeadId);
+    const lead = DATA.leads.find(l=>String(l.id)===String(state.openLeadId));
     lead._modalTab = el.dataset.leadTab;
     render();
   });
   document.querySelectorAll('[data-save-stage]').forEach(el=>el.onclick=()=>{
-    const lead = DATA.leads.find(l=>l.id===el.dataset.saveStage);
+    const lead = DATA.leads.find(l=>String(l.id)===String(el.dataset.saveStage));
     const newStatus = document.getElementById('stageSelect').value;
     lead.status = newStatus;
     lead.statusLog = lead.statusLog||[];
@@ -941,17 +963,17 @@ function attachEvents(){
 
   // Tasks
   document.querySelectorAll('[data-open-new-task]').forEach(el=>el.onclick=()=>{ state.editingTask=null; state.openTaskModal=true; render(); });
-  document.querySelectorAll('[data-edit-task]').forEach(el=>el.onclick=()=>{ state.editingTask = DATA.tasks.find(t=>t.id===el.dataset.editTask); state.openTaskModal=true; render(); });
+  document.querySelectorAll('[data-edit-task]').forEach(el=>el.onclick=()=>{ state.editingTask = DATA.tasks.find(t=>String(t.id)===String(el.dataset.editTask)); state.openTaskModal=true; render(); });
   document.querySelectorAll('[data-save-task]').forEach(el=>el.onclick=()=>{
     const id = el.dataset.saveTask;
     const vals = { title: val('t_title'), leadId: val('t_lead'), assignedTo: val('t_assigned'), priority: val('t_priority'), dueDate: val('t_due') };
     if(!vals.title){ alert('Task title required'); return; }
-    if(id){ Object.assign(DATA.tasks.find(t=>t.id===id), vals); }
+    if(id){ Object.assign(DATA.tasks.find(t=>String(t.id)===String(id)), vals); }
     else { DATA.tasks.push({ id: uid('task'), ...vals, completed:false }); }
     saveData(); state.openTaskModal=false; state.editingTask=null; render();
   });
   document.querySelectorAll('[data-toggle-task]').forEach(el=>el.onchange=()=>{
-    const t = DATA.tasks.find(x=>x.id===el.dataset.toggleTask);
+    const t = DATA.tasks.find(x=>String(x.id)===String(el.dataset.toggleTask));
     t.completed = el.checked; saveData(); render();
   });
 
@@ -976,12 +998,12 @@ function attachEvents(){
     const id = el.dataset.saveQuote;
     const vals = { number: val('q_number'), leadId: val('q_lead'), clientName: val('q_client'), date: val('q_date'), taxPercent: parseFloat(val('q_tax'))||0, items: collectItems(), notes: val('q_notes') };
     if(!vals.clientName){ alert('Client name required'); return; }
-    if(id){ Object.assign(DATA.quotations.find(q=>q.id===id), vals); }
+    if(id){ Object.assign(DATA.quotations.find(q=>String(q.id)===String(id)), vals); }
     else { DATA.quotations.push({ id: uid('quote'), ...vals, status:'Draft' }); }
     saveData(); state.openQuoteModal=false; state.editingQuote=null; state.quoteForLead=null; state.tab='quotations'; render();
   });
   document.querySelectorAll('[data-quote-status]').forEach(el=>el.onchange=()=>{
-    const q = DATA.quotations.find(x=>x.id===el.dataset.quoteStatus);
+    const q = DATA.quotations.find(x=>String(x.id)===String(el.dataset.quoteStatus));
     q.status = el.value; saveData();
   });
   document.querySelectorAll('[data-print-quote]').forEach(el=>el.onclick=()=>{ state.printQuote = el.dataset.printQuote; render(); setTimeout(()=>{state.printQuote=null;},1000); });
@@ -1023,7 +1045,7 @@ function attachEvents(){
   });
 
   document.querySelectorAll('[data-wa-template]').forEach(el=>el.onchange=()=>{
-    const lead = DATA.leads.find(l=>l.id===el.dataset.waTemplate);
+    const lead = DATA.leads.find(l=>String(l.id)===String(el.dataset.waTemplate));
     const val = el.value;
     if(!val || !lead) { el.value=''; return; }
     const templates = {
@@ -1069,9 +1091,9 @@ function attachEvents(){
   });
 
   document.querySelectorAll('[data-wa-quote]').forEach(el=>el.onclick=()=>{
-    const q = DATA.quotations.find(x=>x.id===el.dataset.waQuote);
+    const q = DATA.quotations.find(x=>String(x.id)===String(el.dataset.waQuote));
     const total = q.items.reduce((s,i)=>s+i.qty*i.price,0)*(1+(q.taxPercent||0)/100);
-    const lead = DATA.leads.find(l=>l.id===q.leadId);
+    const lead = DATA.leads.find(l=>String(l.id)===String(q.leadId));
     const num = lead?.whatsapp?.replace(/\D/g,'') || '';
     const text = encodeURIComponent(`Namaste ${q.clientName}, aapki quotation ${q.number} ready hai. Total: ₹${total.toFixed(0)}. Details ke liye reply karein.`);
     window.open(`https://wa.me/${num}?text=${text}`, '_blank');
@@ -1123,12 +1145,12 @@ function wireOverlay(root){
       updatedAt: new Date().toISOString()
     };
     if(!vals.name || !vals.contact){ alert('Client Name aur Contact Number required hai'); return; }
-    if(id){ Object.assign(DATA.leads.find(l=>l.id===id), vals); }
+    if(id){ Object.assign(DATA.leads.find(l=>String(l.id)===String(id)), vals); }
     else { DATA.leads.push({ id: uid('lead'), ...vals, meetings:[], calls:[], statusLog:[{date:todayISO(),status:vals.status}], lastContactDate:'' }); }
     saveData(); removeOverlay(); render();
   });
   root.querySelectorAll('[data-save-call]').forEach(el=>el.onclick=()=>{
-    const lead = DATA.leads.find(l=>l.id===el.dataset.saveCall);
+    const lead = DATA.leads.find(l=>String(l.id)===String(el.dataset.saveCall));
     lead.calls = lead.calls||[];
     lead.calls.push({date:todayISO(), outcome:rval(root,'cl_outcome'), notes:rval(root,'cl_notes')});
     lead.lastContactDate = todayISO();
@@ -1137,7 +1159,7 @@ function wireOverlay(root){
     saveData(); removeOverlay(); render();
   });
   root.querySelectorAll('[data-save-meeting]').forEach(el=>el.onclick=()=>{
-    const lead = DATA.leads.find(l=>l.id===el.dataset.saveMeeting);
+    const lead = DATA.leads.find(l=>String(l.id)===String(el.dataset.saveMeeting));
     lead.meetings = lead.meetings||[];
     lead.meetings.push({date:rval(root,'ml_date'), type:rval(root,'ml_type'), outcome:rval(root,'ml_outcome'), notes:rval(root,'ml_notes')});
     if(rval(root,'ml_followup')) lead.nextFollowupDate = rval(root,'ml_followup');
