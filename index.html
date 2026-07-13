@@ -667,8 +667,8 @@ function LeadModal(id){
   const l = DATA.leads.find(x=>String(x.id)===String(id));
   if(!l) return '';
   const tab = l._modalTab || 'overview';
-  const telHref = l.contact ? `tel:${l.contact.replace(/\s+/g,'')}` : '#';
-  const waHref = l.whatsapp ? `https://wa.me/${l.whatsapp.replace(/\D/g,'')}` : '#';
+  const telHref = l.contact ? `tel:${String(l.contact).replace(/\s+/g,'')}` : '#';
+  const waHref = l.whatsapp ? `https://wa.me/${String(l.whatsapp).replace(/\D/g,'')}` : '#';
 
   const timeline = [];
   (l.meetings||[]).forEach(m=> timeline.push({date:m.date, label:`Meeting (${m.type||'—'})`, body:m.outcome||m.notes||''}));
@@ -1054,7 +1054,7 @@ function attachEvents(){
       quote: `Namaste ${lead.name}, aapki quotation ready hai. Main abhi share karta hu — kripya check karke bataiye.`,
       thanks: `Namaste ${lead.name}, Magix Animation Institute choose karne ke liye dhanyawad! Koi bhi query ho tho hume bataiye, hum hamesha madad ke liye ready hain.`
     };
-    const num = lead.whatsapp.replace(/\D/g,'');
+    const num = String(lead.whatsapp).replace(/\D/g,'');
     window.open(`https://wa.me/${num}?text=${encodeURIComponent(templates[val])}`, '_blank');
     el.value = '';
   });
@@ -1094,7 +1094,7 @@ function attachEvents(){
     const q = DATA.quotations.find(x=>String(x.id)===String(el.dataset.waQuote));
     const total = q.items.reduce((s,i)=>s+i.qty*i.price,0)*(1+(q.taxPercent||0)/100);
     const lead = DATA.leads.find(l=>String(l.id)===String(q.leadId));
-    const num = lead?.whatsapp?.replace(/\D/g,'') || '';
+    const num = lead?.whatsapp ? String(lead.whatsapp).replace(/\D/g,'') : '';
     const text = encodeURIComponent(`Namaste ${q.clientName}, aapki quotation ${q.number} ready hai. Total: ₹${total.toFixed(0)}. Details ke liye reply karein.`);
     window.open(`https://wa.me/${num}?text=${text}`, '_blank');
   });
