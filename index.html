@@ -532,14 +532,44 @@ function LeadsTable(){
 }
 
 // ---------- Calendar ----------
-function getAllEvents(){
-  const events = [];
+function getAllEvents(showCompleted){
+  const raw = [];
   DATA.leads.forEach(l=>{
-    (l.meetings||[]).forEach(m=>{ if(m.date) events.push({date:m.date, type:'Meeting', title:l.name, sub:m.type||'Meeting', leadId:l.id}); });
-    if(l.nextFollowupDate) events.push({date:l.nextFollowupDate, type:'Follow-up', title:l.name, sub:l.status, leadId:l.id});
+    const isClosed = l.status==='Closed Won' || l.status==='Closed Lost';
+    if(l.nextFollowupDate && (showCompleted || !isClosed)){
+      raw.push({date:l.nextFollowupDate, type:'Follow-up', title:l.name, sub:l.status, leadId:l.id, closed:isClosed});
+    }
   });
-  DATA.tasks.forEach(t=>{ if(!t.completed && t.dueDate) events.push({date:t.dueDate, type:'Task', title:t.title, sub:'Assigned: '+(t.assignedTo||'—'), taskId:t.id}); });
-  return events;
+  DATA.tasks.forEach(t=>{
+    if(t.dueDate && (showCompleted || !t.completed)){
+      raw.push({date:t.dueDate, type:'Task', title:t.title, sub:'Assigned: '+(t.assignedTo||'—'), leadId:t.leadId||null, taskId:t.id, completed:t.completed});
+    }
+  });
+  // Merge entries that belong to the same lead on the same day, so a lead
+  // never shows twice on one date (e.g. Follow-up + Task combine into one row).
+  const merged = {};
+  const standalone = [];
+  raw.forEach(e=>{
+    if(e.leadId){
+      const key = e.leadId+'|'+e.date;
+      if(!merged[key]) merged[key] = {date:e.date, leadId:e.leadId, title:e.title, types:[], subs:[], closed:e.closed, completed:true};
+      merged[key].types.push(e.type);
+      merged[key].subs.push(e.sub);
+      if(!e.completed) merged[key].completed = false;
+    } else {
+      standalone.push(e);
+    }
+  });
+  const mergedEvents = Object.values(merged).map(m=>({
+    date:m.date, type:[...new Set(m.types)].join(' + '), title:m.title, sub:m.subs[0], leadId:m.leadId, closed:m.closed, completed:m.completed
+  }));
+  return [...mergedEvents, ...standalone];
+}
+
+function eventPillClass(type){
+  if(type.includes('Meeting')) return 'cold';
+  if(type.includes('Task') && !type.includes('Follow-up')) return 'warm';
+  return 'hot';
 }
 
 function CalendarView(){
@@ -553,7 +583,7 @@ function CalendarView(){
   const monthLabel = firstOfMonth.toLocaleDateString('en-IN',{month:'long',year:'numeric'});
   const today = todayISO();
 
-  const events = getAllEvents();
+  const events = getAllEvents(!!state.calShowCompleted);
   const byDate = {};
   events.forEach(e=>{ (byDate[e.date]=byDate[e.date]||[]).push(e); });
 
@@ -566,11 +596,14 @@ function CalendarView(){
 
   const gridHtml = `
     <div class="card" style="padding:14px 16px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
         <button class="btn ghost small" data-cal-nav="-1">‹ Prev</button>
         <h3 style="font-size:15px;">${monthLabel}</h3>
         <button class="btn ghost small" data-cal-nav="1">Next ›</button>
       </div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin-bottom:12px;cursor:pointer;">
+        <input type="checkbox" id="calShowCompleted" ${state.calShowCompleted?'checked':''}> Show Completed / Closed Activities
+      </label>
       <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:4px;">
         ${dayNames.map(d=>`<div style="text-align:center;font-size:11px;font-weight:700;color:var(--muted);padding:4px 0;">${d}</div>`).join('')}
       </div>
@@ -583,7 +616,12 @@ function CalendarView(){
           const isSelected = dateStr===state.calSelectedDate;
           return `<div data-cal-day="${dateStr}" style="min-height:70px;border-radius:9px;padding:6px;cursor:pointer;border:1px solid ${isSelected?'var(--accent)':'var(--line)'};background:${isToday?'#eef1ff':'#fff'};">
             <div style="font-size:12px;font-weight:${isToday?'800':'600'};color:${isToday?'var(--accent)':'inherit'};margin-bottom:4px;">${d}</div>
-            ${dayEvents.slice(0,2).map(e=>`<div style="font-size:9.5px;padding:1px 5px;border-radius:5px;margin-bottom:2px;background:${e.type==='Meeting'?'#dbeafe':e.type==='Task'?'#fef3c7':'#fee2e2'};color:${e.type==='Meeting'?'#1d4ed8':e.type==='Task'?'#b45309':'#b91c1c'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.title}</div>`).join('')}
+            ${dayEvents.slice(0,2).map(e=>{
+              const pc = eventPillClass(e.type);
+              const bg = pc==='cold'?'#dbeafe':pc==='warm'?'#fef3c7':'#fee2e2';
+              const fg = pc==='cold'?'#1d4ed8':pc==='warm'?'#b45309':'#b91c1c';
+              return `<div style="font-size:9.5px;padding:1px 5px;border-radius:5px;margin-bottom:2px;background:${bg};color:${fg};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${e.closed||e.completed?'opacity:.55;text-decoration:line-through;':''}">${e.title}</div>`;
+            }).join('')}
             ${dayEvents.length>2? `<div style="font-size:9.5px;color:var(--muted);">+${dayEvents.length-2} more</div>`:''}
           </div>`;
         }).join('')}
@@ -595,10 +633,10 @@ function CalendarView(){
     <div class="card">
       <div class="panel-title">${state.calSelectedDate===today?'Today':fmtDate(state.calSelectedDate)}</div>
       ${selEvents.length? selEvents.map(e=>`
-        <div class="list-row" ${e.leadId?`data-open-lead="${e.leadId}"`:''} style="${e.leadId?'cursor:pointer':''}">
-          <span><span class="pill ${e.type==='Meeting'?'cold':e.type==='Task'?'warm':'hot'}">${e.type}</span> &nbsp;${e.title}</span>
+        <div class="list-row" ${e.leadId?`data-open-lead="${e.leadId}"`:''} style="${e.leadId?'cursor:pointer':''}${e.closed||e.completed?'opacity:.55;':''}">
+          <span><span class="pill ${eventPillClass(e.type)}">${e.type}</span> &nbsp;${e.title}</span>
           <span style="color:var(--muted);font-size:11.5px;">${e.sub}</span>
-        </div>`).join('') : `<div class="empty">Kuch bhi scheduled nahi hai is din.</div>`}
+        </div>`).join('') : `<div class="empty">Kuch bhi pending nahi hai is din.</div>`}
     </div>`;
 
   return `<div class="two-col">${gridHtml}${sideHtml}</div>`;
@@ -1015,6 +1053,8 @@ function attachEvents(){
     render();
   });
   document.querySelectorAll('[data-cal-day]').forEach(el=>el.onclick=()=>{ state.calSelectedDate = el.dataset.calDay; render(); });
+  const calShowCompleted = document.getElementById('calShowCompleted');
+  if(calShowCompleted){ calShowCompleted.onchange = ()=>{ state.calShowCompleted = calShowCompleted.checked; render(); }; }
 
   // Team
   document.querySelectorAll('[data-add-member]').forEach(el=>el.onclick=()=>{
