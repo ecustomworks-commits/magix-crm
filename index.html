@@ -77,6 +77,9 @@
   .kcol{background:#eceef5;border-radius:12px;min-width:250px;max-width:250px;padding:10px;flex-shrink:0;}
   .kcol-head{font-size:12.5px;font-weight:700;color:#4b5063;display:flex;justify-content:space-between;margin-bottom:8px;padding:0 3px;}
   .kcard{background:#fff;border-radius:10px;padding:10px 12px;margin-bottom:8px;box-shadow:0 1px 2px rgba(20,20,40,.06);cursor:pointer;border:1px solid var(--line);}
+  .kcard[draggable="true"]{cursor:grab;}
+  .kcard[draggable="true"]:active{cursor:grabbing;}
+  .kcard.dragging{opacity:.4;}
   .kcard:hover{border-color:var(--accent);}
   .kcard .name{font-weight:600;font-size:13.5px;margin-bottom:3px;}
   .kcard .meta{font-size:11.5px;color:var(--muted);}
@@ -280,6 +283,8 @@ function App(){
   ${state.openLeadId ? LeadModal(state.openLeadId) : ''}
   ${state.openTaskModal ? TaskModal() : ''}
   ${state.openQuoteModal ? QuoteModal() : ''}
+  ${state.openScheduleMeeting ? ScheduleMeetingModal() : ''}
+  ${state.openMeetingDetail ? MeetingDetailModal(state.openMeetingDetail.split('|')[0], state.openMeetingDetail.split('|')[1]) : ''}
   ${state.printQuote ? PrintArea(state.printQuote) : ''}
   `;
 }
@@ -289,6 +294,7 @@ function Sidebar(){
     ['dashboard','📊','Dashboard'],
     ['kanban','🗂️','Pipeline'],
     ['leads','👥','Leads'],
+    ['meetings','🗓️','Meeting Schedule'],
     ['calendar','📅','Calendar'],
     ['tasks','✅','Tasks'],
     ['quotations','🧾','Quotations'],
@@ -299,6 +305,7 @@ function Sidebar(){
     ${items.map(([id,icon,label])=>{
       let badge='';
       if(id==='tasks'){ const cnt = DATA.tasks.filter(t=>!t.completed && t.dueDate<=todayISO()).length; if(cnt) badge=`<span class="badge-count">${cnt}</span>`; }
+      if(id==='meetings'){ const cnt = allMeetingsList().filter(m=>m.date===todayISO() && isActiveMeetingStatus(m.status||'Pending')).length; if(cnt) badge=`<span class="badge-count">${cnt}</span>`; }
       return `<div class="nav-item ${state.tab===id?'active':''}" data-nav="${id}"><span class="nav-icon">${icon}</span> ${label} ${badge}</div>`;
     }).join('')}
     <div class="sidebar-foot">Magix Animation Institute<br>Sales Workspace</div>
@@ -306,12 +313,13 @@ function Sidebar(){
 }
 
 function Topbar(){
-  const titles = {dashboard:['Dashboard','Aaj ka overview — calls, meetings, follow-ups'],kanban:['Sales Pipeline','Leads ko stage-wise drag karo'],leads:['Leads','Sare leads ek jagah'],calendar:['Calendar','Meetings, follow-ups aur tasks'],tasks:['Tasks','Team tasks manage karo'],quotations:['Quotations','Quotation banao aur bhejo'],team:['Team','Team members add ya remove karo']};
+  const titles = {dashboard:['Dashboard','Aaj ka overview — calls, meetings, follow-ups'],kanban:['Sales Pipeline','Leads ko stage-wise drag karo'],leads:['Leads','Sare leads ek jagah'],meetings:['Meeting Schedule','Aaj, kal aur aane wali meetings — slot clash check ke saath'],calendar:['Calendar','Meetings, follow-ups aur tasks'],tasks:['Tasks','Team tasks manage karo'],quotations:['Quotations','Quotation banao aur bhejo'],team:['Team','Team members add ya remove karo']};
   const [t,s] = titles[state.tab];
   let action = '';
   if(state.tab==='leads' || state.tab==='kanban') action = `<button class="btn" data-open-new-lead="1">+ New Lead</button>`;
   if(state.tab==='tasks') action = `<button class="btn" data-open-new-task="1">+ New Task</button>`;
   if(state.tab==='quotations') action = `<button class="btn" data-open-new-quote="1">+ New Quotation</button>`;
+  if(state.tab==='meetings') action = `<button class="btn" data-open-schedule-meeting="1">+ Schedule Meeting</button>`;
   return `<div class="topbar"><div><h1>${t}</h1><div class="sub">${s}</div></div>${action}</div>`;
 }
 
@@ -319,11 +327,135 @@ function renderTab(){
   if(state.tab==='dashboard') return Dashboard();
   if(state.tab==='kanban') return Kanban();
   if(state.tab==='leads') return LeadsTable();
+  if(state.tab==='meetings') return MeetingScheduleView();
   if(state.tab==='calendar') return CalendarView();
   if(state.tab==='tasks') return TasksView();
   if(state.tab==='quotations') return QuotationsView();
   if(state.tab==='team') return TeamView();
   return '';
+}
+
+// ---------- Meeting Schedule ----------
+const MEETING_COLUMNS = ['Pending',"Today's Meetings",'In Progress','Completed','Rescheduled','Cancelled'];
+
+function allMeetingsList(){
+  const out = [];
+  let idChanged = false;
+  DATA.leads.forEach(l=>{
+    (l.meetings||[]).forEach((m,idx)=>{
+      if(!m.id){ m.id = 'mtg_' + l.id + '_' + idx + '_' + Math.random().toString(36).slice(2,6); idChanged = true; }
+      if(!m.priority) m.priority = 'Medium';
+      if(m.status==='Scheduled') m.status = 'Pending'; // migrate legacy label
+      out.push({ ...m, status:m.status||'Pending', leadId:l.id, leadName:l.name, company:l.company, contact:l.contact, assignedTo:l.assignedTo });
+    });
+  });
+  if(idChanged) saveData();
+  return out;
+}
+
+function meetingColumn(m){
+  if(m.status==='Cancelled') return 'Cancelled';
+  if(m.status==='Completed') return 'Completed';
+  if(m.status==='Rescheduled') return 'Rescheduled';
+  if(m.status==='In Progress') return 'In Progress';
+  return m.date===todayISO() ? "Today's Meetings" : 'Pending';
+}
+
+function isActiveMeetingStatus(status){ return status!=='Cancelled' && status!=='Completed'; }
+
+function checkSlotConflict(date, time, excludeLeadId){
+  if(!date || !time) return null;
+  for(const l of DATA.leads){
+    for(const m of (l.meetings||[])){
+      if(m.date===date && m.time===time && isActiveMeetingStatus(m.status||'Pending') && String(l.id)!==String(excludeLeadId)){
+        return l.name;
+      }
+    }
+  }
+  return null;
+}
+
+function MeetingScheduleView(){
+  const all = allMeetingsList();
+  const today = todayISO();
+  const grouped = {};
+  MEETING_COLUMNS.forEach(c=>grouped[c]=[]);
+  all.forEach(m=>{ grouped[meetingColumn(m)].push(m); });
+  Object.values(grouped).forEach(arr=>arr.sort((a,b)=>(a.date+((a.time)||'99:99')).localeCompare(b.date+((b.time)||'99:99'))));
+
+  const todayCount = grouped["Today's Meetings"].length;
+  const completedThisWeek = all.filter(m=>{
+    if(m.status!=='Completed') return false;
+    const d = new Date(m.date); const now = new Date(today); const diff = (now-d)/86400000;
+    return diff>=0 && diff<=7;
+  }).length;
+  const cancelledCount = grouped['Cancelled'].length;
+  const pendingCount = grouped['Pending'].length;
+
+  function priorityColor(p){ return p==='High'?'hot':p==='Low'?'cold':'warm'; }
+  function typeIcon(t){ return t==='Google Meet'?'🎥':t==='Phone Meeting'?'📞':t==='Site Visit'?'📍':'🏢'; }
+
+  function meetingCard(m){
+    return `<div class="kcard" draggable="true" data-meeting-id="${m.id}" data-meeting-lead="${m.leadId}" data-open-meeting="${m.id}|${m.leadId}">
+      <div class="name">${m.leadName}</div>
+      <div class="meta">${m.company||'—'}</div>
+      <div class="meta" style="margin-top:4px;">${typeIcon(m.type)} ${m.type||'Meeting'} ${m.time?'· <b>'+m.time+'</b>':''}</div>
+      <div class="meta" style="margin-top:4px;">${fmtDate(m.date)} · ${m.assignedTo||'—'}</div>
+      <div class="meta" style="margin-top:5px;"><span class="pill ${priorityColor(m.priority)}">${m.priority||'Medium'}</span></div>
+    </div>`;
+  }
+
+  return `
+  <div class="grid" style="margin-bottom:16px;">
+    <div class="card"><div class="stat-num">${pendingCount}</div><div class="stat-label">Pending</div></div>
+    <div class="card"><div class="stat-num" style="color:var(--accent)">${todayCount}</div><div class="stat-label">Today's Meetings</div></div>
+    <div class="card"><div class="stat-num" style="color:var(--win)">${completedThisWeek}</div><div class="stat-label">Completed (7 din)</div></div>
+    <div class="card"><div class="stat-num" style="color:${cancelledCount?'var(--hot)':'inherit'}">${cancelledCount}</div><div class="stat-label">Cancelled</div></div>
+  </div>
+  <div class="kanban">
+    ${MEETING_COLUMNS.map(col=>`
+      <div class="kcol" data-meeting-col="${col}">
+        <div class="kcol-head"><span>${col}</span><span>${grouped[col].length}</span></div>
+        ${grouped[col].map(meetingCard).join('') || `<div class="empty" style="padding:14px 4px;">Koi meeting nahi</div>`}
+      </div>`).join('')}
+  </div>
+  `;
+}
+
+function MeetingDetailModal(meetingId, leadId){
+  const lead = DATA.leads.find(l=>String(l.id)===String(leadId));
+  if(!lead) return '';
+  const m = (lead.meetings||[]).find(x=>x.id===meetingId);
+  if(!m) return '';
+  return `<div class="overlay" data-close-overlay="meetingdetail">
+    <div class="modal" data-stop>
+      <div class="modal-head"><h2>${lead.name}</h2><button class="close-x" data-close-overlay="meetingdetail">✕</button></div>
+      <div class="company" style="color:var(--muted);font-size:12.5px;margin-bottom:14px;margin-top:-10px;">${lead.company||'—'} · <span class="pill ${m.status==='Completed'?'won':m.status==='Cancelled'?'lost':'cold'}">${m.status||'Pending'}</span></div>
+      <div class="form-grid">
+        <div class="field"><label>Meeting Date</label><input type="date" id="md_date" value="${m.date||''}"></div>
+        <div class="field"><label>Meeting Time</label><input type="time" id="md_time" value="${m.time||''}"></div>
+        <div class="field"><label>Meeting Type</label><select id="md_type">${['Site Visit','Office Meeting','Google Meet','Phone Meeting'].map(o=>`<option ${m.type===o?'selected':''}>${o}</option>`).join('')}</select></div>
+        <div class="field"><label>Priority</label><select id="md_priority">${['High','Medium','Low'].map(o=>`<option ${(m.priority||'Medium')===o?'selected':''}>${o}</option>`).join('')}</select></div>
+      </div>
+      <div id="md_conflict_warn" style="display:none;background:#fef3c7;border:1px solid #fde68a;color:#92400e;font-size:12px;padding:8px 12px;border-radius:8px;margin-bottom:10px;"></div>
+      <div class="field"><label>Meeting Outcome</label><input id="md_outcome" value="${m.outcome||''}" placeholder="e.g. Interested, needs proposal"></div>
+      <div class="field"><label>Notes</label><textarea id="md_notes">${m.notes||''}</textarea></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+        <button class="icon-btn" data-mtg-status="Pending" data-mtg-id="${m.id}" data-mtg-lead="${leadId}">⏳ Mark Pending</button>
+        <button class="icon-btn" data-mtg-status="In Progress" data-mtg-id="${m.id}" data-mtg-lead="${leadId}">▶️ In Progress</button>
+        <button class="icon-btn" style="color:var(--win);border-color:#a7f3d0;background:#ecfdf5;" data-mtg-status="Completed" data-mtg-id="${m.id}" data-mtg-lead="${leadId}">✅ Mark Completed</button>
+        <button class="icon-btn" data-mtg-status="Rescheduled" data-mtg-id="${m.id}" data-mtg-lead="${leadId}">🔁 Reschedule</button>
+        <button class="icon-btn" style="color:var(--hot);border-color:#fbd5d5;" data-mtg-status="Cancelled" data-mtg-id="${m.id}" data-mtg-lead="${leadId}">🚫 Cancel Meeting</button>
+      </div>
+      <div class="modal-actions" style="justify-content:space-between;">
+        <button class="btn danger small" data-delete-meeting="${m.id}" data-delete-meeting-lead="${leadId}">🗑️ Delete Meeting</button>
+        <div style="display:flex;gap:10px;">
+          <button class="btn secondary" data-close-overlay="meetingdetail">Close</button>
+          <button class="btn" data-save-meeting-detail="${m.id}" data-save-meeting-lead="${leadId}">Save Changes</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
 }
 
 // ---------- Team ----------
@@ -366,7 +498,7 @@ function Dashboard(){
   const totalLeads = leads.length;
   const today = todayISO();
   const todaysCalls = leads.filter(l=>l.lastContactDate===today).length;
-  const todaysMeetings = leads.filter(l=> (l.meetings||[]).some(m=>m.date===today)).length;
+  const todaysMeetings = allMeetingsList().filter(m=>m.date===today && isActiveMeetingStatus(m.status||'Pending')).length;
   const todaysFollowups = leads.filter(l=>l.nextFollowupDate===today).length;
   const overdue = leads.filter(l=>l.nextFollowupDate && l.nextFollowupDate<today && l.status!=='Closed Won' && l.status!=='Closed Lost');
   const pendingQuotes = DATA.quotations.filter(q=>q.status!=='Accepted' && q.status!=='Rejected').length;
@@ -379,7 +511,7 @@ function Dashboard(){
   let alerts = '';
   if(overdue.length) alerts += `<div class="alert danger"><span>⚠️ ${overdue.length} follow-up(s) overdue</span> <button class="btn small ghost" data-nav="leads">View</button></div>`;
   if(dueTodayTasks.length) alerts += `<div class="alert"><span>📌 ${dueTodayTasks.length} task(s) due today</span> <button class="btn small ghost" data-nav="tasks">View</button></div>`;
-  if(todaysMeetings.length) alerts += `<div class="alert"><span>📅 ${todaysMeetings.length} meeting(s) today</span> <button class="btn small ghost" data-nav="calendar">View</button></div>`;
+  if(todaysMeetings) alerts += `<div class="alert"><span>📅 ${todaysMeetings} meeting(s) today</span> <button class="btn small ghost" data-nav="meetings">View</button></div>`;
 
   const teamPerf = DATA.team.map(m=>{
     const owned = leads.filter(l=>l.assignedTo===m);
@@ -394,7 +526,7 @@ function Dashboard(){
   <div class="grid">
     <div class="card clickable-card" data-nav="leads"><div class="stat-num">${totalLeads}</div><div class="stat-label">Total Leads</div></div>
     <div class="card clickable-card" data-nav="leads"><div class="stat-num">${todaysCalls}</div><div class="stat-label">Today's Calls</div></div>
-    <div class="card clickable-card" data-nav="calendar"><div class="stat-num">${todaysMeetings}</div><div class="stat-label">Today's Meetings</div></div>
+    <div class="card clickable-card" data-nav="meetings"><div class="stat-num">${todaysMeetings}</div><div class="stat-label">Today's Meetings</div></div>
     <div class="card clickable-card" data-nav="calendar"><div class="stat-num">${todaysFollowups}</div><div class="stat-label">Today's Follow-ups</div></div>
     <div class="card clickable-card" data-nav="leads"><div class="stat-num" style="color:${overdue.length?'var(--hot)':'inherit'}">${overdue.length}</div><div class="stat-label">Overdue Follow-ups</div></div>
     <div class="card clickable-card" data-nav="quotations"><div class="stat-num">${pendingQuotes}</div><div class="stat-label">Pending Quotations</div></div>
@@ -709,10 +841,10 @@ function LeadModal(id){
   const waHref = l.whatsapp ? `https://wa.me/${String(l.whatsapp).replace(/\D/g,'')}` : '#';
 
   const timeline = [];
-  (l.meetings||[]).forEach(m=> timeline.push({date:m.date, label:`Meeting (${m.type||'—'})`, body:m.outcome||m.notes||''}));
-  (l.calls||[]).forEach(c=> timeline.push({date:c.date, label:`Call — ${c.outcome||'—'}`, body:c.notes||''}));
-  (l.statusLog||[]).forEach(s=> timeline.push({date:s.date, label:`Stage → ${s.status}`, body:''}));
-  timeline.sort((a,b)=>b.date.localeCompare(a.date));
+  (l.meetings||[]).forEach((m,idx)=> timeline.push({date:m.date, createdAt:m.createdAt||(m.date+'T00:00:0'+(idx%10)), label:`Meeting (${m.type||'—'})${m.time?' — '+m.time:''}`, body:m.outcome||m.notes||''}));
+  (l.calls||[]).forEach((c,idx)=> timeline.push({date:c.date, createdAt:c.createdAt||(c.date+'T00:00:1'+(idx%10)), label:`Call — ${c.outcome||'—'}`, body:c.notes||''}));
+  (l.statusLog||[]).forEach((s,idx)=> timeline.push({date:s.date, createdAt:s.createdAt||(s.date+'T00:00:2'+(idx%10)), label:`Stage → ${s.status}`, body:''}));
+  timeline.sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
 
   return `<div class="overlay" data-close-overlay="lead">
     <div class="modal wide" data-stop>
@@ -816,14 +948,42 @@ function CallLogModal(leadId){
     </div>
   </div>`;
 }
+function ScheduleMeetingModal(){
+  return `<div class="overlay" data-close-overlay="schedulemeeting">
+    <div class="modal" data-stop>
+      <div class="modal-head"><h2>Schedule New Meeting</h2><button class="close-x" data-close-overlay="schedulemeeting">✕</button></div>
+      <div class="field"><label>Select Lead*</label><select id="sm_lead">
+        <option value="">— Lead choose karein —</option>
+        ${DATA.leads.map(l=>`<option value="${l.id}">${l.name}${l.company?' — '+l.company:''}</option>`).join('')}
+      </select></div>
+      <div class="form-grid">
+        <div class="field"><label>Meeting Date</label><input type="date" id="sm_date" value="${todayISO()}"></div>
+        <div class="field"><label>Meeting Time</label><input type="time" id="sm_time"></div>
+        <div class="field"><label>Meeting Type</label><select id="sm_type">${['Site Visit','Office Meeting','Google Meet','Phone Meeting'].map(o=>`<option>${o}</option>`).join('')}</select></div>
+        <div class="field"><label>Priority</label><select id="sm_priority">${['High','Medium','Low'].map(o=>`<option ${o==='Medium'?'selected':''}>${o}</option>`).join('')}</select></div>
+      </div>
+      <div id="sm_conflict_warn" style="display:none;background:#fef3c7;border:1px solid #fde68a;color:#92400e;font-size:12px;padding:8px 12px;border-radius:8px;margin-bottom:10px;"></div>
+      <div class="field"><label>Notes (optional)</label><textarea id="sm_notes"></textarea></div>
+      <div class="modal-actions">
+        <button class="btn secondary" data-close-overlay="schedulemeeting">Cancel</button>
+        <button class="btn" data-save-schedule="1">Schedule Meeting</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 function MeetingLogModal(leadId){
   return `<div class="overlay" data-close-overlay="meetinglog">
     <div class="modal" data-stop>
-      <div class="modal-head"><h2>Log Meeting</h2><button class="close-x" data-close-overlay="meetinglog">✕</button></div>
+      <div class="modal-head"><h2>Log / Schedule Meeting</h2><button class="close-x" data-close-overlay="meetinglog">✕</button></div>
       <div class="form-grid">
         <div class="field"><label>Meeting Date</label><input type="date" id="ml_date" value="${todayISO()}"></div>
+        <div class="field"><label>Meeting Time</label><input type="time" id="ml_time"></div>
         <div class="field"><label>Meeting Type</label><select id="ml_type">${['Site Visit','Office Meeting','Google Meet','Phone Meeting'].map(o=>`<option>${o}</option>`).join('')}</select></div>
+        <div class="field"><label>Status</label><select id="ml_status">${['Pending','In Progress','Completed','Rescheduled','Cancelled'].map(o=>`<option>${o}</option>`).join('')}</select></div>
+        <div class="field"><label>Priority</label><select id="ml_priority">${['High','Medium','Low'].map(o=>`<option ${o==='Medium'?'selected':''}>${o}</option>`).join('')}</select></div>
       </div>
+      <div id="ml_conflict_warn" style="display:none;background:#fef3c7;border:1px solid #fde68a;color:#92400e;font-size:12px;padding:8px 12px;border-radius:8px;margin-bottom:10px;"></div>
       <div class="field"><label>Meeting Outcome</label><input id="ml_outcome" placeholder="e.g. Interested, needs proposal"></div>
       <div class="field"><label>Discussion Notes / Client Requirements</label><textarea id="ml_notes"></textarea></div>
       <div class="field"><label>Next Action / Follow-up Date</label><input type="date" id="ml_followup"></div>
@@ -929,6 +1089,8 @@ function attachEvents(){
     if(type==='quote'){ state.openQuoteModal=false; state.editingQuote=null; state.quoteForLead=null; }
     if(type==='calllog') state.callLogFor=null;
     if(type==='meetinglog') state.meetingLogFor=null;
+    if(type==='schedulemeeting') state.openScheduleMeeting=false;
+    if(type==='meetingdetail') state.openMeetingDetail=null;
     render();
   });
   document.querySelectorAll('[data-stop]').forEach(el=>el.onclick=(e)=>e.stopPropagation());
@@ -967,7 +1129,7 @@ function attachEvents(){
   document.querySelectorAll('[data-save-call]').forEach(el=>el.onclick=()=>{
     const lead = DATA.leads.find(l=>String(l.id)===String(el.dataset.saveCall));
     lead.calls = lead.calls||[];
-    lead.calls.push({date:todayISO(), outcome:val('cl_outcome'), notes:val('cl_notes')});
+    lead.calls.push({date:todayISO(), createdAt:new Date().toISOString(), outcome:val('cl_outcome'), notes:val('cl_notes')});
     lead.lastContactDate = todayISO();
     if(val('cl_followup')) lead.nextFollowupDate = val('cl_followup');
     lead.updatedAt = new Date().toISOString();
@@ -978,7 +1140,7 @@ function attachEvents(){
   document.querySelectorAll('[data-save-meeting]').forEach(el=>el.onclick=()=>{
     const lead = DATA.leads.find(l=>String(l.id)===String(el.dataset.saveMeeting));
     lead.meetings = lead.meetings||[];
-    lead.meetings.push({date:val('ml_date'), type:val('ml_type'), outcome:val('ml_outcome'), notes:val('ml_notes')});
+    lead.meetings.push({date:val('ml_date'), time:val('ml_time'), status:val('ml_status')||'Pending', priority:val('ml_priority')||'Medium', type:val('ml_type'), outcome:val('ml_outcome'), notes:val('ml_notes'), createdAt:new Date().toISOString()});
     if(val('ml_followup')) lead.nextFollowupDate = val('ml_followup');
     lead.updatedAt = new Date().toISOString();
     saveData(); removeOverlay(); render();
@@ -994,7 +1156,7 @@ function attachEvents(){
     const newStatus = document.getElementById('stageSelect').value;
     lead.status = newStatus;
     lead.statusLog = lead.statusLog||[];
-    lead.statusLog.push({date:todayISO(), status:newStatus});
+    lead.statusLog.push({date:todayISO(), createdAt:new Date().toISOString(), status:newStatus});
     lead.updatedAt = new Date().toISOString();
     saveData(); render();
   });
@@ -1018,6 +1180,95 @@ function attachEvents(){
   // Quotes
   document.querySelectorAll('[data-open-new-quote]').forEach(el=>el.onclick=()=>{ state.editingQuote=null; state.quoteForLead=null; state.openQuoteModal=true; render(); });
   document.querySelectorAll('[data-open-new-quote-for]').forEach(el=>el.onclick=()=>{ state.editingQuote=null; state.quoteForLead=el.dataset.openNewQuoteFor; state.openQuoteModal=true; state.openLeadId=null; render(); });
+
+  document.querySelectorAll('[data-open-schedule-meeting]').forEach(el=>el.onclick=()=>{ state.openScheduleMeeting=true; render(); });
+  (function(){
+    const smDate = document.getElementById('sm_date');
+    const smTime = document.getElementById('sm_time');
+    const smLead = document.getElementById('sm_lead');
+    if(smDate && smTime){
+      const checkConflict = ()=>{
+        const warn = document.getElementById('sm_conflict_warn');
+        const conflictWith = checkSlotConflict(smDate.value, smTime.value, smLead?smLead.value:null);
+        if(conflictWith){ warn.style.display='block'; warn.textContent = `⚠️ Is time slot par pehle se "${conflictWith}" ke saath meeting hai — dusra time choose karein.`; }
+        else if(warn){ warn.style.display='none'; }
+      };
+      smDate.onchange = checkConflict; smTime.onchange = checkConflict; if(smLead) smLead.onchange = checkConflict;
+    }
+  })();
+  document.querySelectorAll('[data-save-schedule]').forEach(el=>el.onclick=()=>{
+    const leadId = val('sm_lead');
+    if(!leadId){ alert('Lead select karna zaroori hai'); return; }
+    const lead = DATA.leads.find(l=>String(l.id)===String(leadId));
+    lead.meetings = lead.meetings||[];
+    lead.meetings.push({date:val('sm_date'), time:val('sm_time'), type:val('sm_type'), status:'Pending', priority:val('sm_priority')||'Medium', outcome:'', notes:val('sm_notes'), createdAt:new Date().toISOString()});
+    lead.updatedAt = new Date().toISOString();
+    saveData(); state.openScheduleMeeting=false; render();
+  });
+
+  // Meeting Kanban: open detail, drag-and-drop, quick actions
+  document.querySelectorAll('[data-open-meeting]').forEach(el=>el.onclick=()=>{
+    state.openMeetingDetail = el.dataset.openMeeting; render();
+  });
+  document.querySelectorAll('.kanban .kcard[draggable]').forEach(card=>{
+    card.addEventListener('dragstart', ()=>{ card.classList.add('dragging'); });
+    card.addEventListener('dragend', ()=>{ card.classList.remove('dragging'); });
+  });
+  document.querySelectorAll('[data-meeting-col]').forEach(col=>{
+    col.addEventListener('dragover', (e)=>{ e.preventDefault(); col.classList.add('dragover'); });
+    col.addEventListener('dragleave', ()=>col.classList.remove('dragover'));
+    col.addEventListener('drop', (e)=>{
+      e.preventDefault(); col.classList.remove('dragover');
+      const dragging = document.querySelector('.kanban .kcard.dragging');
+      if(!dragging) return;
+      const leadId = dragging.dataset.meetingLead;
+      const meetingId = dragging.dataset.meetingId;
+      const lead = DATA.leads.find(l=>String(l.id)===String(leadId));
+      const m = (lead.meetings||[]).find(x=>x.id===meetingId);
+      const newCol = col.dataset.meetingCol;
+      if(newCol==='Pending'){ m.status='Pending'; }
+      else if(newCol==="Today's Meetings"){ m.status='Pending'; m.date=todayISO(); }
+      else { m.status = newCol; }
+      lead.updatedAt = new Date().toISOString();
+      saveData(); render();
+    });
+  });
+  document.querySelectorAll('[data-mtg-status]').forEach(el=>el.onclick=()=>{
+    const lead = DATA.leads.find(l=>String(l.id)===String(el.dataset.mtgLead));
+    const m = (lead.meetings||[]).find(x=>x.id===el.dataset.mtgId);
+    m.status = el.dataset.mtgStatus;
+    lead.updatedAt = new Date().toISOString();
+    saveData(); state.openMeetingDetail=null; render();
+  });
+  document.querySelectorAll('[data-save-meeting-detail]').forEach(el=>el.onclick=()=>{
+    const lead = DATA.leads.find(l=>String(l.id)===String(el.dataset.saveMeetingLead));
+    const m = (lead.meetings||[]).find(x=>x.id===el.dataset.saveMeetingDetail);
+    m.date = val('md_date'); m.time = val('md_time'); m.type = val('md_type'); m.priority = val('md_priority');
+    m.outcome = val('md_outcome'); m.notes = val('md_notes');
+    lead.updatedAt = new Date().toISOString();
+    saveData(); state.openMeetingDetail=null; render();
+  });
+  document.querySelectorAll('[data-delete-meeting]').forEach(el=>el.onclick=()=>{
+    if(!confirm('Ye meeting permanently delete ho jayegi. Pakka?')) return;
+    const lead = DATA.leads.find(l=>String(l.id)===String(el.dataset.deleteMeetingLead));
+    lead.meetings = (lead.meetings||[]).filter(x=>x.id!==el.dataset.deleteMeeting);
+    lead.updatedAt = new Date().toISOString();
+    saveData(); state.openMeetingDetail=null; render();
+  });
+  (function(){
+    const mdDate = document.getElementById('md_date');
+    const mdTime = document.getElementById('md_time');
+    if(mdDate && mdTime && state.openMeetingDetail){
+      const leadId = state.openMeetingDetail.split('|')[1];
+      const checkConflict = ()=>{
+        const warn = document.getElementById('md_conflict_warn');
+        const conflictWith = checkSlotConflict(mdDate.value, mdTime.value, leadId);
+        if(conflictWith){ warn.style.display='block'; warn.textContent = `⚠️ Is time slot par pehle se "${conflictWith}" ke saath meeting hai — dusra time choose karein.`; }
+        else if(warn){ warn.style.display='none'; }
+      };
+      mdDate.onchange = checkConflict; mdTime.onchange = checkConflict;
+    }
+  })();
   document.querySelectorAll('[data-add-item]').forEach(el=>el.onclick=()=>{
     const q = state.editingQuote || (state.editingQuote = {number:val('q_number'),leadId:val('q_lead'),clientName:val('q_client'),date:val('q_date'),taxPercent:val('q_tax'),items:collectItems(),notes:val('q_notes')});
     q.items = collectItems(); q.items.push({desc:'',qty:1,price:0});
@@ -1176,6 +1427,16 @@ function wireOverlay(root){
   root.querySelectorAll('[data-close-overlay]').forEach(el=>el.onclick=(e)=>{ if(e.target===el) removeOverlay(); });
   root.querySelectorAll('[data-stop]').forEach(el=>el.onclick=(e)=>e.stopPropagation());
   root.querySelectorAll('.close-x').forEach(el=>el.onclick=()=>removeOverlay());
+  const mlDate = root.querySelector('#ml_date'), mlTime = root.querySelector('#ml_time'), mlLeadIdBtn = root.querySelector('[data-save-meeting]');
+  if(mlDate && mlTime){
+    const checkFn = ()=>{
+      const warn = root.querySelector('#ml_conflict_warn');
+      const conflictWith = checkSlotConflict(mlDate.value, mlTime.value, mlLeadIdBtn?mlLeadIdBtn.dataset.saveMeeting:null);
+      if(conflictWith){ warn.style.display='block'; warn.textContent = `⚠️ Is time slot pe pehle se ek meeting hai: ${conflictWith}. Dusra time choose karein.`; }
+      else { warn.style.display='none'; }
+    };
+    mlDate.onchange = checkFn; mlTime.onchange = checkFn;
+  }
   root.querySelectorAll('[data-save-lead]').forEach(el=>el.onclick=()=>{
     const id = el.dataset.saveLead;
     const vals = {
@@ -1192,7 +1453,7 @@ function wireOverlay(root){
   root.querySelectorAll('[data-save-call]').forEach(el=>el.onclick=()=>{
     const lead = DATA.leads.find(l=>String(l.id)===String(el.dataset.saveCall));
     lead.calls = lead.calls||[];
-    lead.calls.push({date:todayISO(), outcome:rval(root,'cl_outcome'), notes:rval(root,'cl_notes')});
+    lead.calls.push({date:todayISO(), createdAt:new Date().toISOString(), outcome:rval(root,'cl_outcome'), notes:rval(root,'cl_notes')});
     lead.lastContactDate = todayISO();
     if(rval(root,'cl_followup')) lead.nextFollowupDate = rval(root,'cl_followup');
     lead.updatedAt = new Date().toISOString();
@@ -1201,7 +1462,7 @@ function wireOverlay(root){
   root.querySelectorAll('[data-save-meeting]').forEach(el=>el.onclick=()=>{
     const lead = DATA.leads.find(l=>String(l.id)===String(el.dataset.saveMeeting));
     lead.meetings = lead.meetings||[];
-    lead.meetings.push({date:rval(root,'ml_date'), type:rval(root,'ml_type'), outcome:rval(root,'ml_outcome'), notes:rval(root,'ml_notes')});
+    lead.meetings.push({date:rval(root,'ml_date'), time:rval(root,'ml_time'), status:rval(root,'ml_status')||'Pending', priority:rval(root,'ml_priority')||'Medium', type:rval(root,'ml_type'), outcome:rval(root,'ml_outcome'), notes:rval(root,'ml_notes'), createdAt:new Date().toISOString()});
     if(rval(root,'ml_followup')) lead.nextFollowupDate = rval(root,'ml_followup');
     lead.updatedAt = new Date().toISOString();
     saveData(); removeOverlay(); render();
