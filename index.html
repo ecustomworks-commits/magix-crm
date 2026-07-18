@@ -304,7 +304,7 @@ function Sidebar(){
     <div class="brand"><span class="dot"></span> Magix Sales CRM</div>
     ${items.map(([id,icon,label])=>{
       let badge='';
-      if(id==='tasks'){ const cnt = DATA.tasks.filter(t=>!t.completed && t.dueDate<=todayISO()).length; if(cnt) badge=`<span class="badge-count">${cnt}</span>`; }
+      if(id==='tasks'){ const cnt = DATA.tasks.filter(t=>!t.completed && !t.cancelled && t.dueDate<=todayISO()).length; if(cnt) badge=`<span class="badge-count">${cnt}</span>`; }
       if(id==='meetings'){ const cnt = allMeetingsList().filter(m=>m.date===todayISO() && isActiveMeetingStatus(m.status||'Pending')).length; if(cnt) badge=`<span class="badge-count">${cnt}</span>`; }
       return `<div class="nav-item ${state.tab===id?'active':''}" data-nav="${id}"><span class="nav-icon">${icon}</span> ${label} ${badge}</div>`;
     }).join('')}
@@ -336,7 +336,7 @@ function renderTab(){
 }
 
 // ---------- Meeting Schedule ----------
-const MEETING_COLUMNS = ['Pending',"Today's Meetings",'In Progress','Completed','Rescheduled','Cancelled'];
+const MEETING_COLUMNS = ["Today's Meetings","Tomorrow's Meetings","Upcoming Meetings",'Rescheduled','Completed','Cancelled'];
 
 function allMeetingsList(){
   const out = [];
@@ -353,12 +353,18 @@ function allMeetingsList(){
   return out;
 }
 
+function tomorrowISO(){ const d=new Date(); d.setDate(d.getDate()+1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+
 function meetingColumn(m){
   if(m.status==='Cancelled') return 'Cancelled';
   if(m.status==='Completed') return 'Completed';
   if(m.status==='Rescheduled') return 'Rescheduled';
-  if(m.status==='In Progress') return 'In Progress';
-  return m.date===todayISO() ? "Today's Meetings" : 'Pending';
+  // Active (Pending / In Progress) meetings are grouped purely by date —
+  // overdue/missed ones fold into Today's Meetings so nothing is lost from view.
+  const today = todayISO(), tomorrow = tomorrowISO();
+  if(m.date<=today) return "Today's Meetings";
+  if(m.date===tomorrow) return "Tomorrow's Meetings";
+  return "Upcoming Meetings";
 }
 
 function isActiveMeetingStatus(status){ return status!=='Cancelled' && status!=='Completed'; }
@@ -390,25 +396,26 @@ function MeetingScheduleView(){
     return diff>=0 && diff<=7;
   }).length;
   const cancelledCount = grouped['Cancelled'].length;
-  const pendingCount = grouped['Pending'].length;
+  const upcomingCount = grouped['Upcoming Meetings'].length + grouped["Tomorrow's Meetings"].length;
 
   function priorityColor(p){ return p==='High'?'hot':p==='Low'?'cold':'warm'; }
   function typeIcon(t){ return t==='Google Meet'?'🎥':t==='Phone Meeting'?'📞':t==='Site Visit'?'📍':'🏢'; }
 
   function meetingCard(m){
-    return `<div class="kcard" draggable="true" data-meeting-id="${m.id}" data-meeting-lead="${m.leadId}" data-open-meeting="${m.id}|${m.leadId}">
+    const overdue = isActiveMeetingStatus(m.status) && m.date<today;
+    return `<div class="kcard" draggable="true" data-meeting-id="${m.id}" data-meeting-lead="${m.leadId}" data-open-meeting="${m.id}|${m.leadId}" style="${overdue?'border-left:3px solid var(--hot);':''}">
       <div class="name">${m.leadName}</div>
       <div class="meta">${m.company||'—'}</div>
       <div class="meta" style="margin-top:4px;">${typeIcon(m.type)} ${m.type||'Meeting'} ${m.time?'· <b>'+m.time+'</b>':''}</div>
-      <div class="meta" style="margin-top:4px;">${fmtDate(m.date)} · ${m.assignedTo||'—'}</div>
+      <div class="meta" style="margin-top:4px;${overdue?'color:var(--hot);font-weight:600;':''}">${overdue?'⚠️ Overdue · ':''}${fmtDate(m.date)} · ${m.assignedTo||'—'}</div>
       <div class="meta" style="margin-top:5px;"><span class="pill ${priorityColor(m.priority)}">${m.priority||'Medium'}</span></div>
     </div>`;
   }
 
   return `
   <div class="grid" style="margin-bottom:16px;">
-    <div class="card"><div class="stat-num">${pendingCount}</div><div class="stat-label">Pending</div></div>
     <div class="card"><div class="stat-num" style="color:var(--accent)">${todayCount}</div><div class="stat-label">Today's Meetings</div></div>
+    <div class="card"><div class="stat-num">${upcomingCount}</div><div class="stat-label">Upcoming (Tom. + Later)</div></div>
     <div class="card"><div class="stat-num" style="color:var(--win)">${completedThisWeek}</div><div class="stat-label">Completed (7 din)</div></div>
     <div class="card"><div class="stat-num" style="color:${cancelledCount?'var(--hot)':'inherit'}">${cancelledCount}</div><div class="stat-label">Cancelled</div></div>
   </div>
@@ -505,8 +512,8 @@ function Dashboard(){
   const won = leads.filter(l=>l.status==='Closed Won').length;
   const lost = leads.filter(l=>l.status==='Closed Lost').length;
 
-  const overdueTasks = DATA.tasks.filter(t=>!t.completed && t.dueDate && t.dueDate<today);
-  const dueTodayTasks = DATA.tasks.filter(t=>!t.completed && t.dueDate===today);
+  const overdueTasks = DATA.tasks.filter(t=>!t.completed && !t.cancelled && t.dueDate && t.dueDate<today);
+  const dueTodayTasks = DATA.tasks.filter(t=>!t.completed && !t.cancelled && t.dueDate===today);
 
   let alerts = '';
   if(overdue.length) alerts += `<div class="alert danger"><span>⚠️ ${overdue.length} follow-up(s) overdue</span> <button class="btn small ghost" data-nav="leads">View</button></div>`;
@@ -611,18 +618,34 @@ function pillClass(l){
 
 // ---------- Kanban ----------
 function Kanban(){
+  const stageColors = {
+    'New Lead':'#94a3b8','Contacted':'#3b82f6','Meeting Scheduled':'#8b5cf6',
+    'Proposal Sent':'#f59e0b','Negotiation':'#f97316','Closed Won':'#10b981','Closed Lost':'#9ca3af'
+  };
+  const priorityBorder = {Hot:'var(--hot)', Warm:'var(--warm)', Cold:'var(--cold)'};
+  function initials(name){ return (name||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase(); }
+  const today = todayISO();
   return `<div class="kanban">
     ${STAGES.map(stage=>{
       const items = DATA.leads.filter(l=>l.status===stage);
+      const clr = stageColors[stage]||'var(--accent)';
       return `<div class="kcol" data-stage-col="${stage}">
-        <div class="kcol-head"><span>${stage}</span><span>${items.length}</span></div>
-        ${items.map(l=>`
-          <div class="kcard" data-open-lead="${l.id}">
-            <div class="name">${l.name}</div>
-            <div class="meta">${l.company||'—'}</div>
-            <div class="meta" style="margin-top:5px;"><span class="pill ${l.priority?.toLowerCase()||'cold'}">${l.priority||'—'}</span></div>
-            ${l.nextFollowupDate? `<div class="meta" style="margin-top:5px;">Next: ${fmtDate(l.nextFollowupDate)}</div>`:''}
-          </div>`).join('') || `<div class="empty" style="padding:14px 4px;">Koi lead nahi hai</div>`}
+        <div class="kcol-head" style="border-bottom:2px solid ${clr};padding-bottom:8px;margin-bottom:10px;"><span>${stage}</span><span style="background:${clr};color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;">${items.length}</span></div>
+        ${items.map(l=>{
+          const overdue = l.nextFollowupDate && l.nextFollowupDate<today && stage!=='Closed Won' && stage!=='Closed Lost';
+          return `
+          <div class="kcard" data-open-lead="${l.id}" style="border-left:3px solid ${priorityBorder[l.priority]||'var(--line)'};">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+              <span style="width:26px;height:26px;border-radius:50%;background:${clr}22;color:${clr};font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${initials(l.name)}</span>
+              <div style="min-width:0;"><div class="name" style="margin-bottom:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${l.name}</div></div>
+            </div>
+            <div class="meta" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${l.company||'—'}</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
+              <span class="pill ${l.priority?.toLowerCase()||'cold'}">${l.priority||'—'}</span>
+              ${l.nextFollowupDate? `<span class="meta" style="${overdue?'color:var(--hot);font-weight:600;':''}">${overdue?'⚠️ ':''}${fmtDate(l.nextFollowupDate)}</span>`:''}
+            </div>
+          </div>`;
+        }).join('') || `<div class="empty" style="padding:14px 4px;">Koi lead nahi hai</div>`}
       </div>`;
     }).join('')}
   </div>`;
@@ -673,6 +696,7 @@ function getAllEvents(showCompleted){
     }
   });
   DATA.tasks.forEach(t=>{
+    if(t.cancelled && !showCompleted) return;
     if(t.dueDate && (showCompleted || !t.completed)){
       raw.push({date:t.dueDate, type:'Task', title:t.title, sub:'Assigned: '+(t.assignedTo||'—'), leadId:t.leadId||null, taskId:t.id, completed:t.completed});
     }
@@ -775,8 +799,72 @@ function CalendarView(){
 }
 
 // ---------- Tasks ----------
+function leadPriorityWeight(t){
+  if(!t.leadId) return 3; // no linked lead — neutral
+  const lead = DATA.leads.find(l=>String(l.id)===String(t.leadId));
+  if(!lead) return 3;
+  if(lead.priority==='Hot') return 0;
+  if(lead.priority==='Warm') return 1;
+  if(lead.priority==='Cold') return 2;
+  return 3;
+}
+function taskPriorityWeight(p){ return p==='High'?0:p==='Medium'?1:2; }
+function sortTasksSmartly(list){
+  return [...list].sort((a,b)=>{
+    const lw = leadPriorityWeight(a) - leadPriorityWeight(b);
+    if(lw!==0) return lw;
+    const pw = taskPriorityWeight(a.priority) - taskPriorityWeight(b.priority);
+    if(pw!==0) return pw;
+    return (a.dueDate||'9999').localeCompare(b.dueDate||'9999');
+  });
+}
+
 function TasksView(){
   let tasks = DATA.tasks;
+  if(state.taskFilter!=='all') tasks = tasks.filter(t=>t.assignedTo===state.taskFilter);
+  const today = todayISO();
+
+  const overdue = sortTasksSmartly(tasks.filter(t=>!t.completed && !t.cancelled && t.dueDate && t.dueDate<today));
+  const dueToday = sortTasksSmartly(tasks.filter(t=>!t.completed && !t.cancelled && t.dueDate===today));
+  const upcoming = sortTasksSmartly(tasks.filter(t=>!t.completed && !t.cancelled && (!t.dueDate || t.dueDate>today)));
+  const completed = tasks.filter(t=>t.completed && !t.cancelled).sort((a,b)=>(b.dueDate||'').localeCompare(a.dueDate||''));
+  const cancelled = tasks.filter(t=>t.cancelled);
+
+  function taskRow(t){
+    const lead = DATA.leads.find(l=>String(l.id)===String(t.leadId));
+    const isOverdue = !t.completed && !t.cancelled && t.dueDate && t.dueDate<today;
+    const hotBorder = leadPriorityWeight(t)===0 && !t.completed && !t.cancelled;
+    return `<div class="list-row" style="${hotBorder?'border-left:3px solid var(--hot);padding-left:8px;':''}${t.completed?'opacity:.6;':''}${t.cancelled?'opacity:.5;':''}">
+      <span style="display:flex;align-items:center;gap:10px;">
+        <input type="checkbox" data-toggle-task="${t.id}" ${t.completed?'checked':''} ${t.cancelled?'disabled':''}>
+        <span>
+          <span style="${t.completed?'text-decoration:line-through;color:var(--muted);':''}"><b>${t.title}</b></span>
+          ${hotBorder?' <span class="pill hot">HOT LEAD</span>':''}
+          <br>
+          <span style="font-size:11.5px;color:var(--muted);">
+            ${lead? `<a href="#" data-open-lead="${lead.id}" style="color:var(--accent);">${lead.name}</a> · `:''}
+            ${t.assignedTo||'—'} · <span class="pill ${t.priority==='High'?'hot':t.priority==='Medium'?'warm':'cold'}">${t.priority}</span>
+          </span>
+        </span>
+      </span>
+      <span style="display:flex;align-items:center;gap:8px;">
+        <span style="color:${isOverdue?'var(--hot)':'inherit'};font-size:12.5px;">${fmtDate(t.dueDate)}</span>
+        <button class="btn ghost small" data-edit-task="${t.id}">Edit</button>
+        ${!t.completed && !t.cancelled? `<button class="btn ghost small" data-cancel-task="${t.id}">Cancel</button>`:''}
+        ${t.cancelled? `<button class="btn ghost small" data-uncancel-task="${t.id}">Restore</button>`:''}
+        <button class="btn danger small" data-delete-task="${t.id}">Delete</button>
+      </span>
+    </div>`;
+  }
+
+  function section(title, list, emptyMsg, accentColor){
+    if(!list.length && title!=="Today's Tasks") return ''; // hide empty sections except Today (always show context)
+    return `<div class="card" style="margin-bottom:14px;">
+      <div class="panel-title">${accentColor?`<span style="color:${accentColor};">${title}</span>`:title} <span style="font-weight:400;color:var(--muted);font-size:12px;">(${list.length})</span></div>
+      ${list.length? list.map(taskRow).join('') : `<div class="empty">${emptyMsg}</div>`}
+    </div>`;
+  }
+
   return `
   <div class="toolbar">
     <select id="taskFilterSel">
@@ -784,25 +872,11 @@ function TasksView(){
       ${DATA.team.map(m=>`<option value="${m}" ${state.taskFilter===m?'selected':''}>Assigned to ${m}</option>`).join('')}
     </select>
   </div>
-  ${(state.taskFilter==='all'?tasks:tasks.filter(t=>t.assignedTo===state.taskFilter)).length? '' : ''}
-  <table>
-    <thead><tr><th></th><th>Task</th><th>Related Lead</th><th>Assigned To</th><th>Priority</th><th>Due Date</th><th></th></tr></thead>
-    <tbody>
-    ${(state.taskFilter==='all'?tasks:tasks.filter(t=>t.assignedTo===state.taskFilter)).map(t=>{
-      const lead = DATA.leads.find(l=>String(l.id)===String(t.leadId));
-      const overdue = !t.completed && t.dueDate && t.dueDate<todayISO();
-      return `<tr>
-        <td><input type="checkbox" data-toggle-task="${t.id}" ${t.completed?'checked':''}></td>
-        <td style="${t.completed?'text-decoration:line-through;color:var(--muted);':''}"><b>${t.title}</b></td>
-        <td>${lead? `<a href="#" data-open-lead="${lead.id}" style="color:var(--accent);">${lead.name}</a>`:'—'}</td>
-        <td>${t.assignedTo||'—'}</td>
-        <td><span class="pill ${t.priority==='High'?'hot':t.priority==='Medium'?'warm':'cold'}">${t.priority}</span></td>
-        <td style="color:${overdue?'var(--hot)':'inherit'}">${fmtDate(t.dueDate)}</td>
-        <td><button class="btn ghost small" data-edit-task="${t.id}">Edit</button> <button class="btn danger small" data-delete-task="${t.id}">Delete</button></td>
-      </tr>`;
-    }).join('') || `<tr><td colspan="7"><div class="empty">No tasks yet. Click "+ New Task" to create one.</div></td></tr>`}
-    </tbody>
-  </table>
+  ${section('⚠️ Overdue Tasks', overdue, 'Koi overdue task nahi hai — badhiya!', 'var(--hot)')}
+  ${section("Today's Tasks", dueToday, 'Aaj ke liye koi task due nahi hai.')}
+  ${section('Upcoming Tasks', upcoming, 'Koi upcoming task nahi hai.')}
+  ${completed.length? section('✅ Completed Tasks', completed, ''):''}
+  ${cancelled.length? section('🚫 Cancelled Tasks', cancelled, ''):''}
   `;
 }
 
@@ -1169,12 +1243,20 @@ function attachEvents(){
     const vals = { title: val('t_title'), leadId: val('t_lead'), assignedTo: val('t_assigned'), priority: val('t_priority'), dueDate: val('t_due') };
     if(!vals.title){ alert('Task title required'); return; }
     if(id){ Object.assign(DATA.tasks.find(t=>String(t.id)===String(id)), vals); }
-    else { DATA.tasks.push({ id: uid('task'), ...vals, completed:false }); }
+    else { DATA.tasks.push({ id: uid('task'), ...vals, completed:false, cancelled:false }); }
     saveData(); state.openTaskModal=false; state.editingTask=null; render();
   });
   document.querySelectorAll('[data-toggle-task]').forEach(el=>el.onchange=()=>{
     const t = DATA.tasks.find(x=>String(x.id)===String(el.dataset.toggleTask));
     t.completed = el.checked; saveData(); render();
+  });
+  document.querySelectorAll('[data-cancel-task]').forEach(el=>el.onclick=()=>{
+    const t = DATA.tasks.find(x=>String(x.id)===String(el.dataset.cancelTask));
+    t.cancelled = true; saveData(); render();
+  });
+  document.querySelectorAll('[data-uncancel-task]').forEach(el=>el.onclick=()=>{
+    const t = DATA.tasks.find(x=>String(x.id)===String(el.dataset.uncancelTask));
+    t.cancelled = false; saveData(); render();
   });
 
   // Quotes
@@ -1226,8 +1308,13 @@ function attachEvents(){
       const lead = DATA.leads.find(l=>String(l.id)===String(leadId));
       const m = (lead.meetings||[]).find(x=>x.id===meetingId);
       const newCol = col.dataset.meetingCol;
-      if(newCol==='Pending'){ m.status='Pending'; }
-      else if(newCol==="Today's Meetings"){ m.status='Pending'; m.date=todayISO(); }
+      if(newCol==="Today's Meetings"){ m.status='Pending'; m.date=todayISO(); }
+      else if(newCol==="Tomorrow's Meetings"){ m.status='Pending'; m.date=tomorrowISO(); }
+      else if(newCol==='Upcoming Meetings'){
+        m.status='Pending';
+        const t = tomorrowISO();
+        if(!m.date || m.date<=t){ const d=new Date(); d.setDate(d.getDate()+2); m.date = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+      }
       else { m.status = newCol; }
       lead.updatedAt = new Date().toISOString();
       saveData(); render();
