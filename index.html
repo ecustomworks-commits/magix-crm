@@ -830,6 +830,28 @@ function CalendarView(){
 }
 
 // ---------- Tasks ----------
+const TASK_COLUMNS = ['To Do','In Progress','Waiting','Completed','Cancelled'];
+
+// Normalizes every task to have a valid Kanban status while keeping the
+// existing `completed`/`cancelled` booleans in sync — this is what Calendar,
+// Dashboard alerts, and the sidebar badge already read, so nothing else breaks.
+function normalizeTaskStatuses(){
+  let changed = false;
+  DATA.tasks.forEach(t=>{
+    if(!t.status){
+      t.status = t.cancelled ? 'Cancelled' : t.completed ? 'Completed' : 'To Do';
+      changed = true;
+    }
+  });
+  if(changed) saveData();
+}
+function taskColumn(t){ return TASK_COLUMNS.includes(t.status) ? t.status : 'To Do'; }
+function setTaskStatus(t, status){
+  t.status = status;
+  t.completed = status==='Completed';
+  t.cancelled = status==='Cancelled';
+}
+
 function leadPriorityWeight(t){
   if(!t.leadId) return 3; // no linked lead — neutral
   const lead = DATA.leads.find(l=>String(l.id)===String(t.leadId));
@@ -851,48 +873,31 @@ function sortTasksSmartly(list){
 }
 
 function TasksView(){
+  normalizeTaskStatuses();
   let tasks = DATA.tasks;
   if(state.taskFilter!=='all') tasks = tasks.filter(t=>t.assignedTo===state.taskFilter);
   const today = todayISO();
 
-  const overdue = sortTasksSmartly(tasks.filter(t=>!t.completed && !t.cancelled && t.dueDate && t.dueDate<today));
-  const dueToday = sortTasksSmartly(tasks.filter(t=>!t.completed && !t.cancelled && t.dueDate===today));
-  const upcoming = sortTasksSmartly(tasks.filter(t=>!t.completed && !t.cancelled && (!t.dueDate || t.dueDate>today)));
-  const completed = tasks.filter(t=>t.completed && !t.cancelled).sort((a,b)=>(b.dueDate||'').localeCompare(a.dueDate||''));
-  const cancelled = tasks.filter(t=>t.cancelled);
+  const grouped = {};
+  TASK_COLUMNS.forEach(c=>grouped[c]=[]);
+  tasks.forEach(t=>grouped[taskColumn(t)].push(t));
+  TASK_COLUMNS.forEach(c=>{ if(c!=='Completed' && c!=='Cancelled') grouped[c] = sortTasksSmartly(grouped[c]); });
 
-  function taskRow(t){
+  const colColors = {'To Do':'#94a3b8','In Progress':'#3b82f6','Waiting':'#f59e0b','Completed':'#10b981','Cancelled':'#9ca3af'};
+
+  function taskCard(t){
     const lead = DATA.leads.find(l=>String(l.id)===String(t.leadId));
-    const isOverdue = !t.completed && !t.cancelled && t.dueDate && t.dueDate<today;
-    const hotBorder = leadPriorityWeight(t)===0 && !t.completed && !t.cancelled;
-    return `<div class="list-row" style="${hotBorder?'border-left:3px solid var(--hot);padding-left:8px;':''}${t.completed?'opacity:.6;':''}${t.cancelled?'opacity:.5;':''}">
-      <span style="display:flex;align-items:center;gap:10px;">
-        <input type="checkbox" data-toggle-task="${t.id}" ${t.completed?'checked':''} ${t.cancelled?'disabled':''}>
-        <span>
-          <span style="${t.completed?'text-decoration:line-through;color:var(--muted);':''}"><b>${t.title}</b></span>
-          ${hotBorder?' <span class="pill hot">HOT LEAD</span>':''}
-          <br>
-          <span style="font-size:11.5px;color:var(--muted);">
-            ${lead? `<a href="#" data-open-lead="${lead.id}" style="color:var(--accent);">${lead.name}</a> · `:''}
-            ${t.assignedTo||'—'} · <span class="pill ${t.priority==='High'?'hot':t.priority==='Medium'?'warm':'cold'}">${t.priority}</span>
-          </span>
-        </span>
-      </span>
-      <span style="display:flex;align-items:center;gap:8px;">
-        <span style="color:${isOverdue?'var(--hot)':'inherit'};font-size:12.5px;">${fmtDate(t.dueDate)}</span>
-        <button class="btn ghost small" data-edit-task="${t.id}">Edit</button>
-        ${!t.completed && !t.cancelled? `<button class="btn ghost small" data-cancel-task="${t.id}">Cancel</button>`:''}
-        ${t.cancelled? `<button class="btn ghost small" data-uncancel-task="${t.id}">Restore</button>`:''}
-        <button class="btn danger small" data-delete-task="${t.id}">Delete</button>
-      </span>
-    </div>`;
-  }
-
-  function section(title, list, emptyMsg, accentColor){
-    if(!list.length && title!=="Today's Tasks") return ''; // hide empty sections except Today (always show context)
-    return `<div class="card" style="margin-bottom:14px;">
-      <div class="panel-title">${accentColor?`<span style="color:${accentColor};">${title}</span>`:title} <span style="font-weight:400;color:var(--muted);font-size:12px;">(${list.length})</span></div>
-      ${list.length? list.map(taskRow).join('') : `<div class="empty">${emptyMsg}</div>`}
+    const isOverdue = t.status!=='Completed' && t.status!=='Cancelled' && t.dueDate && t.dueDate<today;
+    const hotBorder = leadPriorityWeight(t)===0 && t.status!=='Completed' && t.status!=='Cancelled';
+    return `<div class="kcard" draggable="true" data-task-id="${t.id}" data-open-task="${t.id}" style="${hotBorder?'border-left:3px solid var(--hot);':isOverdue?'border-left:3px solid #f59e0b;':''}">
+      <div class="name">${t.title}</div>
+      ${lead? `<div class="meta">${lead.name}${lead.company?' · '+lead.company:''}</div>` : ''}
+      <div class="meta" style="margin-top:4px;">👤 ${t.assignedTo||'—'}</div>
+      <div class="meta" style="margin-top:4px;${isOverdue?'color:var(--hot);font-weight:600;':''}">${isOverdue?'⚠️ ':''}${fmtDate(t.dueDate)}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
+        <span class="pill ${t.priority==='High'?'hot':t.priority==='Medium'?'warm':'cold'}">${t.priority}</span>
+        ${hotBorder? `<span class="pill hot">HOT</span>` : ''}
+      </div>
     </div>`;
   }
 
@@ -903,11 +908,15 @@ function TasksView(){
       ${DATA.team.map(m=>`<option value="${m}" ${state.taskFilter===m?'selected':''}>Assigned to ${m}</option>`).join('')}
     </select>
   </div>
-  ${section('⚠️ Overdue Tasks', overdue, 'Koi overdue task nahi hai — badhiya!', 'var(--hot)')}
-  ${section("Today's Tasks", dueToday, 'Aaj ke liye koi task due nahi hai.')}
-  ${section('Upcoming Tasks', upcoming, 'Koi upcoming task nahi hai.')}
-  ${completed.length? section('✅ Completed Tasks', completed, ''):''}
-  ${cancelled.length? section('🚫 Cancelled Tasks', cancelled, ''):''}
+  <div class="kanban">
+    ${TASK_COLUMNS.map(col=>{
+      const clr = colColors[col];
+      return `<div class="kcol" data-task-col="${col}">
+        <div class="kcol-head" style="border-bottom:2px solid ${clr};padding-bottom:8px;margin-bottom:10px;"><span>${col}</span><span style="background:${clr};color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;">${grouped[col].length}</span></div>
+        ${grouped[col].map(taskCard).join('') || `<div class="empty" style="padding:14px 4px;">Koi task nahi</div>`}
+      </div>`;
+    }).join('')}
+  </div>
   `;
 }
 
@@ -1102,7 +1111,7 @@ function MeetingLogModal(leadId){
 
 // ---------- Task Modal ----------
 function TaskModal(){
-  const t = state.editingTask || {title:'',leadId:'',assignedTo:DATA.team[0],priority:'Medium',dueDate:todayISO(),completed:false};
+  const t = state.editingTask || {title:'',leadId:'',assignedTo:DATA.team[0],priority:'Medium',dueDate:todayISO(),completed:false,cancelled:false,status:'To Do'};
   return `<div class="overlay" data-close-overlay="task">
     <div class="modal" data-stop>
       <div class="modal-head"><h2>${state.editingTask?'Edit Task':'New Task'}</h2><button class="close-x" data-close-overlay="task">✕</button></div>
@@ -1113,9 +1122,18 @@ function TaskModal(){
         <div class="field"><label>Priority</label><select id="t_priority">${['High','Medium','Low'].map(p=>`<option ${t.priority===p?'selected':''}>${p}</option>`).join('')}</select></div>
         <div class="field"><label>Due Date</label><input type="date" id="t_due" value="${t.dueDate||''}"></div>
       </div>
-      <div class="modal-actions">
-        <button class="btn secondary" data-close-overlay="task">Cancel</button>
-        <button class="btn" data-save-task="${t.id||''}">${state.editingTask?'Save Changes':'Create Task'}</button>
+      ${state.editingTask? `
+      <div class="field"><label>Status</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          ${TASK_COLUMNS.map(col=>`<button type="button" class="icon-btn ${taskColumn(t)===col?'':''}" style="${taskColumn(t)===col?'background:var(--accent);color:#fff;border-color:var(--accent);':''}" data-set-task-status="${col}" data-set-task-id="${t.id}">${col}</button>`).join('')}
+        </div>
+      </div>` : ''}
+      <div class="modal-actions" style="justify-content:space-between;">
+        ${state.editingTask? `<button class="btn danger small" data-delete-task="${t.id}">🗑️ Delete Task</button>` : `<span></span>`}
+        <div style="display:flex;gap:10px;">
+          <button class="btn secondary" data-close-overlay="task">Cancel</button>
+          <button class="btn" data-save-task="${t.id||''}">${state.editingTask?'Save Changes':'Create Task'}</button>
+        </div>
       </div>
     </div>
   </div>`;
@@ -1278,26 +1296,37 @@ function attachEvents(){
 
   // Tasks
   document.querySelectorAll('[data-open-new-task]').forEach(el=>el.onclick=()=>{ state.editingTask=null; state.openTaskModal=true; render(); });
-  document.querySelectorAll('[data-edit-task]').forEach(el=>el.onclick=()=>{ state.editingTask = DATA.tasks.find(t=>String(t.id)===String(el.dataset.editTask)); state.openTaskModal=true; render(); });
+  document.querySelectorAll('[data-open-task]').forEach(el=>el.onclick=()=>{ state.editingTask = DATA.tasks.find(t=>String(t.id)===String(el.dataset.openTask)); state.openTaskModal=true; render(); });
   document.querySelectorAll('[data-save-task]').forEach(el=>el.onclick=()=>{
     const id = el.dataset.saveTask;
     const vals = { title: val('t_title'), leadId: val('t_lead'), assignedTo: val('t_assigned'), priority: val('t_priority'), dueDate: val('t_due') };
     if(!vals.title){ alert('Task title required'); return; }
     if(id){ Object.assign(DATA.tasks.find(t=>String(t.id)===String(id)), vals); }
-    else { DATA.tasks.push({ id: uid('task'), ...vals, completed:false, cancelled:false }); }
+    else { DATA.tasks.push({ id: uid('task'), ...vals, completed:false, cancelled:false, status:'To Do' }); }
     saveData(); state.openTaskModal=false; state.editingTask=null; render();
   });
-  document.querySelectorAll('[data-toggle-task]').forEach(el=>el.onchange=()=>{
-    const t = DATA.tasks.find(x=>String(x.id)===String(el.dataset.toggleTask));
-    t.completed = el.checked; saveData(); render();
+  document.querySelectorAll('[data-set-task-status]').forEach(el=>el.onclick=()=>{
+    const t = DATA.tasks.find(x=>String(x.id)===String(el.dataset.setTaskId));
+    setTaskStatus(t, el.dataset.setTaskStatus);
+    saveData(); state.openTaskModal=false; state.editingTask=null; render();
   });
-  document.querySelectorAll('[data-cancel-task]').forEach(el=>el.onclick=()=>{
-    const t = DATA.tasks.find(x=>String(x.id)===String(el.dataset.cancelTask));
-    t.cancelled = true; saveData(); render();
+
+  // Task Kanban: drag-and-drop between columns (plain cards, no nested inputs — safe)
+  document.querySelectorAll('.kanban .kcard[data-task-id]').forEach(card=>{
+    card.addEventListener('dragstart', ()=>{ card.classList.add('dragging'); });
+    card.addEventListener('dragend', ()=>{ card.classList.remove('dragging'); });
   });
-  document.querySelectorAll('[data-uncancel-task]').forEach(el=>el.onclick=()=>{
-    const t = DATA.tasks.find(x=>String(x.id)===String(el.dataset.uncancelTask));
-    t.cancelled = false; saveData(); render();
+  document.querySelectorAll('[data-task-col]').forEach(col=>{
+    col.addEventListener('dragover', (e)=>{ e.preventDefault(); col.classList.add('dragover'); });
+    col.addEventListener('dragleave', ()=>col.classList.remove('dragover'));
+    col.addEventListener('drop', (e)=>{
+      e.preventDefault(); col.classList.remove('dragover');
+      const dragging = document.querySelector('.kanban .kcard.dragging[data-task-id]');
+      if(!dragging) return;
+      const t = DATA.tasks.find(x=>String(x.id)===String(dragging.dataset.taskId));
+      setTaskStatus(t, col.dataset.taskCol);
+      saveData(); render();
+    });
   });
 
   // Quotes
@@ -1500,8 +1529,8 @@ function attachEvents(){
   });
   document.querySelectorAll('[data-delete-task]').forEach(el=>el.onclick=()=>{
     if(!confirm('Ye task delete ho jayega. Pakka?')) return;
-    DATA.tasks = DATA.tasks.filter(t=>t.id!==el.dataset.deleteTask);
-    saveData(); render();
+    DATA.tasks = DATA.tasks.filter(t=>String(t.id)!==String(el.dataset.deleteTask));
+    saveData(); state.openTaskModal=false; state.editingTask=null; render();
   });
   document.querySelectorAll('[data-delete-quote]').forEach(el=>el.onclick=()=>{
     if(!confirm('Ye quotation delete ho jayega. Pakka?')) return;
