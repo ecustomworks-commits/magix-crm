@@ -234,6 +234,41 @@ function showSetupBanner(){
 }
 function uid(prefix){ return prefix + '_' + (DATA.nextId++) + '_' + Math.random().toString(36).slice(2,6); }
 
+// ---------- AI Assist (Google Gemini via Apps Script proxy — key never exposed here) ----------
+async function callAI(prompt){
+  if(!APPS_SCRIPT_URL || APPS_SCRIPT_URL.includes('PASTE_YOUR')) return {error:'Google Sheet backend connect nahi hai.'};
+  try{
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({action:'ai_generate', prompt})
+    });
+    const json = await res.json();
+    return json;
+  }catch(e){ return {error:'AI request fail ho gayi: '+e.message}; }
+}
+
+function buildFollowupPrompt(lead){
+  const recentCalls = (lead.calls||[]).slice(-3).map(c=>`${c.date}: ${c.outcome||''} — ${c.notes||''}`).join('\n') || 'Koi call log nahi hai';
+  const recentMeetings = (lead.meetings||[]).slice(-2).map(m=>`${m.date}: ${m.type||''} — ${m.outcome||m.notes||''}`).join('\n') || 'Koi meeting nahi hui';
+  return `Tum ek sales executive ke assistant ho, Magix Animation Institute ke liye (ye ek animation/photography training institute hai).
+Neeche ek lead ki details hain. Isse ek chhota, warm, professional WhatsApp follow-up message likho — Hinglish me, natural tone me, 2-3 lines se zyada nahi. Koi generic template jaisa mat lagna, is specific lead ke context ke hisaab se likhna.
+
+Lead Name: ${lead.name}
+Company: ${lead.company||'—'}
+Current Stage: ${lead.status}
+Priority: ${lead.priority}
+Notes: ${lead.notes||'—'}
+
+Recent Calls:
+${recentCalls}
+
+Recent Meetings:
+${recentMeetings}
+
+Sirf WhatsApp message likho, aur kuch mat likho (na intro, na explanation).`;
+}
+
 // ---------- Constants ----------
 const STAGES = ['New Lead','Contacted','Meeting Scheduled','Proposal Sent','Negotiation','Closed Won','Closed Lost'];
 
@@ -316,6 +351,7 @@ function App(){
   ${state.openQuoteModal ? QuoteModal() : ''}
   ${state.openScheduleMeeting ? ScheduleMeetingModal() : ''}
   ${state.openMeetingDetail ? MeetingDetailModal(state.openMeetingDetail.split('|')[0], state.openMeetingDetail.split('|')[1]) : ''}
+  ${state.aiModalLeadId ? AISuggestionModal() : ''}
   ${state.printQuote ? PrintArea(state.printQuote) : ''}
   `;
 }
@@ -979,6 +1015,7 @@ function LeadModal(id){
           <option value="quote">Quotation Ready</option>
           <option value="thanks">Thank You</option>
         </select>`:''}
+        <button class="icon-btn" style="color:#7c3aed;border-color:#ddd6fe;background:#f5f3ff;" data-ai-followup="${l.id}">✨ AI Follow-up Suggestion</button>
         <button class="icon-btn" data-log-call="${l.id}">📝 Log Call</button>
         <button class="icon-btn" data-log-meeting="${l.id}">🤝 Log Meeting</button>
         <button class="icon-btn" data-open-new-quote-for="${l.id}">🧾 Create Quotation</button>
@@ -1173,6 +1210,34 @@ function QuoteModal(){
   </div>`;
 }
 
+function AISuggestionModal(){
+  const lead = DATA.leads.find(l=>String(l.id)===String(state.aiModalLeadId));
+  if(!lead) return '';
+  return `<div class="overlay" data-close-overlay="aisuggestion">
+    <div class="modal" data-stop>
+      <div class="modal-head"><h2>✨ AI Follow-up Suggestion</h2><button class="close-x" data-close-overlay="aisuggestion">✕</button></div>
+      <div style="color:var(--muted);font-size:12.5px;margin-bottom:12px;margin-top:-8px;">${lead.name} ke liye — Gemini AI se generate hua</div>
+      ${state.aiModalLoading? `
+        <div style="display:flex;align-items:center;gap:10px;padding:20px 0;color:var(--muted);font-size:13px;">
+          <div class="spinner" style="width:20px;height:20px;border-width:2px;"></div> Message ban raha hai…
+        </div>
+      ` : state.aiModalError? `
+        <div class="alert danger">${state.aiModalError}</div>
+        <button class="btn secondary small" data-ai-retry="${lead.id}">Dobara try karein</button>
+      ` : `
+        <div class="field"><textarea id="ai_result_text" style="min-height:120px;">${state.aiModalText||''}</textarea></div>
+        <div class="modal-actions" style="justify-content:space-between;">
+          <button class="btn secondary small" data-ai-retry="${lead.id}">🔄 Naya suggestion</button>
+          <div style="display:flex;gap:10px;">
+            <button class="btn secondary" data-copy-ai-text="1">📋 Copy</button>
+            ${lead.whatsapp? `<button class="btn" data-send-ai-whatsapp="${lead.id}">💬 Send via WhatsApp</button>` : ''}
+          </div>
+        </div>
+      `}
+    </div>
+  </div>`;
+}
+
 function PrintArea(qid){
   const q = DATA.quotations.find(x=>String(x.id)===String(qid));
   if(!q) return '';
@@ -1214,6 +1279,7 @@ function attachEvents(){
     if(type==='meetinglog') state.meetingLogFor=null;
     if(type==='schedulemeeting') state.openScheduleMeeting=false;
     if(type==='meetingdetail') state.openMeetingDetail=null;
+    if(type==='aisuggestion'){ state.aiModalLeadId=null; state.aiModalText=''; state.aiModalError=null; state.aiModalLoading=false; }
     render();
   });
   document.querySelectorAll('[data-stop]').forEach(el=>el.onclick=(e)=>e.stopPropagation());
@@ -1505,6 +1571,32 @@ function attachEvents(){
     const num = String(lead.whatsapp).replace(/\D/g,'');
     window.open(`https://wa.me/${num}?text=${encodeURIComponent(templates[val])}`, '_blank');
     el.value = '';
+  });
+
+  // AI Follow-up Suggestion
+  async function runAISuggestion(leadId){
+    state.aiModalLeadId = leadId; state.aiModalLoading = true; state.aiModalError = null; state.aiModalText = '';
+    render();
+    const lead = DATA.leads.find(l=>String(l.id)===String(leadId));
+    const result = await callAI(buildFollowupPrompt(lead));
+    if(state.aiModalLeadId !== leadId) return; // modal closed / changed before response arrived
+    state.aiModalLoading = false;
+    if(result.error){ state.aiModalError = result.error; }
+    else { state.aiModalText = (result.text||'').trim(); }
+    render();
+  }
+  document.querySelectorAll('[data-ai-followup]').forEach(el=>el.onclick=()=>{ runAISuggestion(el.dataset.aiFollowup); });
+  document.querySelectorAll('[data-ai-retry]').forEach(el=>el.onclick=()=>{ runAISuggestion(el.dataset.aiRetry); });
+  document.querySelectorAll('[data-copy-ai-text]').forEach(el=>el.onclick=()=>{
+    const ta = document.getElementById('ai_result_text');
+    if(ta){ ta.select(); document.execCommand('copy'); el.textContent = '✓ Copied'; setTimeout(()=>{ el.textContent='📋 Copy'; }, 1500); }
+  });
+  document.querySelectorAll('[data-send-ai-whatsapp]').forEach(el=>el.onclick=()=>{
+    const lead = DATA.leads.find(l=>String(l.id)===String(el.dataset.sendAiWhatsapp));
+    const ta = document.getElementById('ai_result_text');
+    const text = ta ? ta.value : state.aiModalText;
+    const num = String(lead.whatsapp).replace(/\D/g,'');
+    window.open(`https://wa.me/${num}?text=${encodeURIComponent(text)}`, '_blank');
   });
 
   document.querySelectorAll('[data-pipeline-stage]').forEach(el=>el.onclick=()=>{
