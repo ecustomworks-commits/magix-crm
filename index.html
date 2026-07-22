@@ -252,41 +252,6 @@ function showSetupBanner(){
 }
 function uid(prefix){ return prefix + '_' + (DATA.nextId++) + '_' + Math.random().toString(36).slice(2,6); }
 
-// ---------- AI Assist (Google Gemini via Apps Script proxy — key never exposed here) ----------
-async function callAI(prompt){
-  if(!APPS_SCRIPT_URL || APPS_SCRIPT_URL.includes('PASTE_YOUR')) return {error:'Google Sheet backend connect nahi hai.'};
-  try{
-    const res = await fetch(APPS_SCRIPT_URL, {
-      method:'POST',
-      headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({action:'ai_generate', prompt})
-    });
-    const json = await res.json();
-    return json;
-  }catch(e){ return {error:'AI request fail ho gayi: '+e.message}; }
-}
-
-function buildFollowupPrompt(lead){
-  const recentCalls = (lead.calls||[]).slice(-3).map(c=>`${c.date}: ${c.outcome||''} — ${c.notes||''}`).join('\n') || 'Koi call log nahi hai';
-  const recentMeetings = (lead.meetings||[]).slice(-2).map(m=>`${m.date}: ${m.type||''} — ${m.outcome||m.notes||''}`).join('\n') || 'Koi meeting nahi hui';
-  return `Tum ek sales executive ke assistant ho, Magix Animation Institute ke liye (ye ek animation/photography training institute hai).
-Neeche ek lead ki details hain. Isse ek chhota, warm, professional WhatsApp follow-up message likho — Hinglish me, natural tone me, 2-3 lines se zyada nahi. Koi generic template jaisa mat lagna, is specific lead ke context ke hisaab se likhna.
-
-Lead Name: ${lead.name}
-Company: ${lead.company||'—'}
-Current Stage: ${lead.status}
-Priority: ${lead.priority}
-Notes: ${lead.notes||'—'}
-
-Recent Calls:
-${recentCalls}
-
-Recent Meetings:
-${recentMeetings}
-
-Sirf WhatsApp message likho, aur kuch mat likho (na intro, na explanation).`;
-}
-
 // ---------- Constants ----------
 const STAGES = ['New Lead','Contacted','Meeting Scheduled','Proposal Sent','Negotiation','Closed Won','Closed Lost'];
 
@@ -369,8 +334,7 @@ function App(){
   ${state.openQuoteModal ? QuoteModal() : ''}
   ${state.openScheduleMeeting ? ScheduleMeetingModal() : ''}
   ${state.openMeetingDetail ? MeetingDetailModal(state.openMeetingDetail.split('|')[0], state.openMeetingDetail.split('|')[1]) : ''}
-  ${state.aiChatOpen ? AIChatModal() : ''}
-  <button class="icon-btn" id="floatingAIBtn" data-open-ai-chat="1" style="position:fixed;bottom:22px;right:22px;z-index:70;border-radius:50%;width:54px;height:54px;padding:0;justify-content:center;font-size:22px;background:#7c3aed;color:#fff;border:none;box-shadow:0 4px 14px rgba(124,58,237,.4);">✨</button>
+
   ${state.printQuote ? PrintArea(state.printQuote) : ''}
   `;
 }
@@ -1034,7 +998,7 @@ function LeadModal(id){
           <option value="quote">Quotation Ready</option>
           <option value="thanks">Thank You</option>
         </select>`:''}
-        <button class="icon-btn" style="color:#7c3aed;border-color:#ddd6fe;background:#f5f3ff;" data-open-ai-chat-lead="${l.id}">✨ AI Assistant</button>
+
         <button class="icon-btn" data-log-call="${l.id}">📝 Log Call</button>
         <button class="icon-btn" data-log-meeting="${l.id}">🤝 Log Meeting</button>
         <button class="icon-btn" data-open-new-quote-for="${l.id}">🧾 Create Quotation</button>
@@ -1229,35 +1193,6 @@ function QuoteModal(){
   </div>`;
 }
 
-function AIChatModal(){
-  const lead = state.aiChatLeadId ? DATA.leads.find(l=>String(l.id)===String(state.aiChatLeadId)) : null;
-  const msgs = state.aiChatMessages||[];
-  return `<div class="overlay" data-close-overlay="aichat">
-    <div class="modal" data-stop>
-      <div class="modal-head"><h2>✨ AI Assistant</h2><button class="close-x" data-close-overlay="aichat">✕</button></div>
-      ${lead? `<div style="color:var(--muted);font-size:12.5px;margin-bottom:10px;margin-top:-8px;">Context: <b>${lead.name}</b>${lead.company?' — '+lead.company:''}</div>` : `<div style="color:var(--muted);font-size:12.5px;margin-bottom:10px;margin-top:-8px;">Jo bhi chahiye bol do — message likhna ho, summary chahiye ho, ya koi bhi sawaal ho</div>`}
-      <div id="ai_chat_history" style="max-height:320px;overflow-y:auto;margin-bottom:12px;padding-right:4px;">
-        ${msgs.length? msgs.map(m=>`
-          <div style="margin-bottom:12px;${m.role==='user'?'text-align:right;':''}">
-            <div style="display:inline-block;max-width:85%;padding:9px 13px;border-radius:12px;font-size:13.5px;text-align:left;white-space:pre-wrap;${m.role==='user'?'background:var(--accent);color:#fff;border-bottom-right-radius:3px;':'background:#f3f4f8;color:var(--ink);border-bottom-left-radius:3px;'}">${m.text}</div>
-          </div>`).join('') : `<div class="empty" style="padding:16px 0;">Neeche type karke shuru karo</div>`}
-        ${state.aiChatLoading? `<div style="display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;padding:6px 0;"><div class="spinner" style="width:16px;height:16px;border-width:2px;"></div> Soch raha hai…</div>` : ''}
-      </div>
-      ${state.aiChatError? `<div class="alert danger" style="margin-bottom:10px;">${state.aiChatError}</div>` : ''}
-      <div style="display:flex;gap:8px;">
-        <textarea id="ai_chat_input" placeholder="${lead?'e.g. Isko follow-up message likh do':'e.g. Ek follow-up message likh do is client ke liye jo 2 din se reply nahi kar raha'}" style="flex:1;min-height:56px;padding:10px 13px;border:1px solid var(--line);border-radius:10px;font-size:13.5px;resize:vertical;">${state.aiChatDraft||''}</textarea>
-      </div>
-      <div class="modal-actions" style="justify-content:space-between;">
-        <div>${msgs.length? `<button class="btn secondary small" data-ai-clear="1">🗑️ Clear Chat</button>`:''}</div>
-        <div style="display:flex;gap:10px;">
-          ${lead && lead.whatsapp && msgs.length? `<button class="btn secondary" data-send-ai-whatsapp="${lead.id}">💬 Last reply WhatsApp pe bhejo</button>`:''}
-          <button class="btn" data-ai-send="1">Send ➤</button>
-        </div>
-      </div>
-    </div>
-  </div>`;
-}
-
 function PrintArea(qid){
   const q = DATA.quotations.find(x=>String(x.id)===String(qid));
   if(!q) return '';
@@ -1299,7 +1234,6 @@ function attachEvents(){
     if(type==='meetinglog') state.meetingLogFor=null;
     if(type==='schedulemeeting') state.openScheduleMeeting=false;
     if(type==='meetingdetail') state.openMeetingDetail=null;
-    if(type==='aichat'){ state.aiChatOpen=false; }
     render();
   });
   document.querySelectorAll('[data-stop]').forEach(el=>el.onclick=(e)=>e.stopPropagation());
@@ -1591,63 +1525,6 @@ function attachEvents(){
     const num = String(lead.whatsapp).replace(/\D/g,'');
     window.open(`https://wa.me/${num}?text=${encodeURIComponent(templates[val])}`, '_blank');
     el.value = '';
-  });
-
-  // AI Assistant (general-purpose chat)
-  document.querySelectorAll('[data-open-ai-chat]').forEach(el=>el.onclick=()=>{
-    state.aiChatOpen = true; state.aiChatLeadId = null; state.aiChatError = null;
-    render();
-  });
-  document.querySelectorAll('[data-open-ai-chat-lead]').forEach(el=>el.onclick=()=>{
-    const leadId = el.dataset.openAiChatLead;
-    state.aiChatOpen = true; state.aiChatLeadId = leadId; state.aiChatError = null;
-    if(!state.aiChatMessages || !state.aiChatMessages.length){
-      const lead = DATA.leads.find(l=>String(l.id)===String(leadId));
-      state.aiChatDraft = `Isko ek follow-up WhatsApp message likh do — ${lead.name}, current stage: ${lead.status}.`;
-    }
-    render();
-  });
-  async function sendAIChat(){
-    const ta = document.getElementById('ai_chat_input');
-    const input = (ta ? ta.value : state.aiChatDraft || '').trim();
-    if(!input) return;
-    state.aiChatMessages = state.aiChatMessages || [];
-    state.aiChatMessages.push({role:'user', text:input});
-    state.aiChatDraft = '';
-    state.aiChatLoading = true; state.aiChatError = null;
-    render();
-    const lead = state.aiChatLeadId ? DATA.leads.find(l=>String(l.id)===String(state.aiChatLeadId)) : null;
-    let fullPrompt = '';
-    if(lead){
-      fullPrompt += `Context — Lead: ${lead.name}, Company: ${lead.company||'—'}, Stage: ${lead.status}, Priority: ${lead.priority}, Notes: ${lead.notes||'—'}.\n\n`;
-    }
-    if(state.aiChatMessages.length>1){
-      fullPrompt += 'Pichli conversation:\n' + state.aiChatMessages.slice(0,-1).map(m=>`${m.role==='user'?'User':'Assistant'}: ${m.text}`).join('\n') + '\n\n';
-    }
-    fullPrompt += `User ka naya message: ${input}\n\nTum Magix Animation Institute ke sales assistant ho. Hinglish me, concise aur practical jawab do — jo bhi user ne manga hai (message likhna ho, summary, ya koi bhi sawaal) wahi karo, seedha jawab do, extra intro/explanation mat do.`;
-    const result = await callAI(fullPrompt);
-    state.aiChatLoading = false;
-    if(result.error){ state.aiChatError = (typeof result.error === 'string' ? result.error : result.message) || 'AI request fail ho gayi.'; }
-    else { state.aiChatMessages.push({role:'model', text:(result.text||'').trim()}); }
-    render();
-    const hist = document.getElementById('ai_chat_history');
-    if(hist) hist.scrollTop = hist.scrollHeight;
-  }
-  document.querySelectorAll('[data-ai-send]').forEach(el=>el.onclick=sendAIChat);
-  const aiChatInputEl = document.getElementById('ai_chat_input');
-  if(aiChatInputEl){
-    aiChatInputEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendAIChat(); } });
-    aiChatInputEl.addEventListener('input', ()=>{ state.aiChatDraft = aiChatInputEl.value; });
-  }
-  document.querySelectorAll('[data-ai-clear]').forEach(el=>el.onclick=()=>{
-    state.aiChatMessages = []; state.aiChatError = null; render();
-  });
-  document.querySelectorAll('[data-send-ai-whatsapp]').forEach(el=>el.onclick=()=>{
-    const lead = DATA.leads.find(l=>String(l.id)===String(el.dataset.sendAiWhatsapp));
-    const lastModelMsg = [...(state.aiChatMessages||[])].reverse().find(m=>m.role==='model');
-    if(!lastModelMsg) return;
-    const num = String(lead.whatsapp).replace(/\D/g,'');
-    window.open(`https://wa.me/${num}?text=${encodeURIComponent(lastModelMsg.text)}`, '_blank');
   });
 
   document.querySelectorAll('[data-pipeline-stage]').forEach(el=>el.onclick=()=>{
