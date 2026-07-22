@@ -1599,7 +1599,7 @@ function attachEvents(){
     const result = await callAI(buildFollowupPrompt(lead));
     if(state.aiModalLeadId !== leadId) return; // modal closed / changed before response arrived
     state.aiModalLoading = false;
-    if(result.error){ state.aiModalError = result.error; }
+    if(result.error){ state.aiModalError = (typeof result.error === 'string' ? result.error : result.message) || 'AI request fail ho gayi.'; }
     else { state.aiModalText = (result.text||'').trim(); }
     render();
   }
